@@ -1,16 +1,28 @@
 syntax = "proto3";
 
-option java_multiple_files = true;
-option java_package = "io.grpc.examples.chatservice";
-option java_outer_classname = "ChatServiceProto";
-
 package chatservice;
 
-message NewPeerRequest{}
+option java_multiple_files = true;
+option java_package = "com.hab.grpc.chatservice";
+option java_outer_classname = "ChatService";
+
+message NewPeerRequest{
+    string user_id = 1;
+}
+
 message NewPeerResponse{
     int32 response_code = 1;
 }
 
+message SearchingPeerRequest {
+    string user_id = 1;
+    int32 radius_distance_in_meters = 2;
+}
+
+message SearchingPeerResponse {
+    int32 response_code = 1;
+    string user_id = 2;
+}
 
 message NewMessageRequest {
     string user_id = 1;
@@ -23,5 +35,6 @@ message NewMessageResponse {
 
 service Chat {
     rpc NewPeer (NewPeerRequest) returns (NewPeerResponse) {}
+    rpc SearchingPeer(SearchingPeerRequest) returns (stream SearchingPeerResponse) {}
     rpc NewMessage (NewMessageRequest) returns (NewMessageResponse) {}
 }
