@@ -14,6 +14,8 @@ pub struct SearchingPeerRequest {
     pub user_id: std::string::String,
     #[prost(int32, tag = "2")]
     pub radius_distance_in_meters: i32,
+    #[prost(string, tag = "3")]
+    pub status: std::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SearchingPeerResponse {
@@ -21,6 +23,10 @@ pub struct SearchingPeerResponse {
     pub response_code: i32,
     #[prost(string, tag = "2")]
     pub user_id: std::string::String,
+    #[prost(int32, tag = "3")]
+    pub radius_distance_in_meters: i32,
+    #[prost(string, tag = "4")]
+    pub status: std::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NewMessageRequest {
@@ -31,6 +37,18 @@ pub struct NewMessageRequest {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NewMessageResponse {
+    #[prost(int32, tag = "1")]
+    pub response_code: i32,
+    #[prost(string, tag = "2")]
+    pub message: std::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PeerClosedRequest {
+    #[prost(string, tag = "1")]
+    pub user_id: std::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PeerClosedResponse {
     #[prost(int32, tag = "1")]
     pub response_code: i32,
 }
@@ -131,23 +149,32 @@ pub mod chat_server {
     #[doc = "Generated trait containing gRPC methods that should be implemented for use with ChatServer."]
     #[async_trait]
     pub trait Chat: Send + Sync + 'static {
+        async fn new_peer(
+            &mut self,
+            request: tonic::Request<super::NewPeerRequest>,
+        ) -> Result<tonic::Response<super::NewPeerResponse>, tonic::Status>;
         #[doc = "Server streaming response type for the NewPeer method."]
         type SearchingPeerStream: Stream<Item = Result<super::SearchingPeerResponse, tonic::Status>>
             + Send
             + Sync
             + 'static;
-        async fn new_peer(
-            &mut self,
-            request: tonic::Request<super::NewPeerRequest>,
-        ) -> Result<tonic::Response<super::NewPeerResponse>, tonic::Status>;
         async fn searching_peer(
             &mut self,
             request: tonic::Request<super::SearchingPeerRequest>,
         ) -> Result<tonic::Response<Self::SearchingPeerStream>, tonic::Status>;
+        #[doc = "Server streaming response type for the NewMessage method."]
+        type NewMessageStream: Stream<Item = Result<super::NewMessageResponse, tonic::Status>>
+            + Send
+            + Sync
+            + 'static;
         async fn new_message(
-            &self,
+            &mut self,
             request: tonic::Request<super::NewMessageRequest>,
-        ) -> Result<tonic::Response<super::NewMessageResponse>, tonic::Status>;
+        ) -> Result<tonic::Response<Self::NewMessageStream>, tonic::Status>;
+        async fn peer_closed(
+            &mut self,
+            request: tonic::Request<super::PeerClosedRequest>,
+        ) -> Result<tonic::Response<super::PeerClosedResponse>, tonic::Status>;
     }
     #[derive(Debug)]
     #[doc(hidden)]
@@ -255,9 +282,10 @@ pub mod chat_server {
                 "/chatservice.Chat/NewMessage" => {
                     #[allow(non_camel_case_types)]
                     struct NewMessageSvc<T: Chat>(pub Arc<Mutex<T>>);
-                    impl<T: Chat> tonic::server::UnaryService<super::NewMessageRequest> for NewMessageSvc<T> {
+                    impl<T: Chat> tonic::server::ServerStreamingService<super::NewMessageRequest> for NewMessageSvc<T> {
                         type Response = super::NewMessageResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        type ResponseStream = T::NewMessageStream;
+                        type Future = BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::NewMessageRequest>,
@@ -275,6 +303,40 @@ pub mod chat_server {
                         let interceptor = inner.1.clone();
                         let inner = inner.0;
                         let method = NewMessageSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = if let Some(interceptor) = interceptor {
+                            tonic::server::Grpc::with_interceptor(codec, interceptor)
+                        } else {
+                            tonic::server::Grpc::new(codec)
+                        };
+                        let res = grpc.server_streaming(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/chatservice.Chat/PeerClosed" => {
+                    #[allow(non_camel_case_types)]
+                    struct PeerClosedSvc<T: Chat>(pub Arc<Mutex<T>>);
+                    impl<T: Chat> tonic::server::UnaryService<super::PeerClosedRequest> for PeerClosedSvc<T> {
+                        type Response = super::PeerClosedResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::PeerClosedRequest>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move { 
+                                let mut tmp_inner = inner.lock().await;
+                                tmp_inner.peer_closed(request).await
+                             };
+                            Box::pin(fut)
+                        }
+                    }
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let interceptor = inner.1.clone();
+                        let inner = inner.0;
+                        let method = PeerClosedSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = if let Some(interceptor) = interceptor {
                             tonic::server::Grpc::with_interceptor(codec, interceptor)

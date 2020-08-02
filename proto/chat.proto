@@ -17,11 +17,14 @@ message NewPeerResponse{
 message SearchingPeerRequest {
     string user_id = 1;
     int32 radius_distance_in_meters = 2;
+    string status = 3;
 }
 
 message SearchingPeerResponse {
     int32 response_code = 1;
     string user_id = 2;
+    int32 radius_distance_in_meters = 3;
+    string status = 4;
 }
 
 message NewMessageRequest {
@@ -31,10 +34,20 @@ message NewMessageRequest {
 
 message NewMessageResponse {
     int32 response_code = 1;
+    string message = 2;
+}
+
+message PeerClosedRequest{
+    string user_id = 1;
+}
+
+message PeerClosedResponse{
+    int32 response_code = 1;
 }
 
 service Chat {
     rpc NewPeer (NewPeerRequest) returns (NewPeerResponse) {}
     rpc SearchingPeer(SearchingPeerRequest) returns (stream SearchingPeerResponse) {}
-    rpc NewMessage (NewMessageRequest) returns (NewMessageResponse) {}
+    rpc NewMessage (NewMessageRequest) returns (stream NewMessageResponse) {}
+    rpc PeerClosed (PeerClosedRequest) returns (PeerClosedResponse) {}
 }
