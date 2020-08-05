@@ -4,7 +4,7 @@ package chatservice;
 
 option java_multiple_files = true;
 option java_package = "com.hab.grpc.chatservice";
-option java_outer_classname = "ChatService";
+option java_outer_classname = "ChatServiceGRPC";
 
 message NewPeerRequest{
     string user_id = 1;
@@ -16,7 +16,7 @@ message NewPeerResponse{
 
 message SearchingPeerRequest {
     string user_id = 1;
-    int32 radius_distance_in_meters = 2;
+    int32 radius_distance_in_meters = 2;//todo: replace radius distance with latitude and longitude
     string status = 3;
 }
 
@@ -37,6 +37,32 @@ message NewMessageResponse {
     string message = 2;
 }
 
+message NewCollectiveMessageRequest {
+    string user_id = 1;
+    string message = 2;
+}
+
+message NewCollectiveMessageResponse {
+    int32 response_code = 1;
+    string message = 2;
+}
+
+message TypingMessageRequest {
+    string user_id = 1;
+}
+
+message TypingMessageResponse {
+    int32 response_code = 1;
+}
+
+message ChatClosedRequest {}
+
+message ChatClosedResponse {}
+
+message CollectiveChatClosedRequest {}
+
+message CollectiveChatClosedResponse {}
+
 message PeerClosedRequest{
     string user_id = 1;
 }
@@ -49,5 +75,9 @@ service Chat {
     rpc NewPeer (NewPeerRequest) returns (NewPeerResponse) {}
     rpc SearchingPeer(SearchingPeerRequest) returns (stream SearchingPeerResponse) {}
     rpc NewMessage (NewMessageRequest) returns (stream NewMessageResponse) {}
+    rpc NewCollectiveMessage(NewCollectiveMessageRequest) returns (stream NewCollectiveMessageResponse) {}
+    rpc TypingMessage(TypingMessageRequest) returns (stream TypingMessageResponse) {}
+    rpc ChatClosed(ChatClosedRequest) returns(stream ChatClosedResponse){}
+    rpc CollectiveChatClosed(CollectiveChatClosedRequest) returns(stream CollectiveChatClosedResponse){}
     rpc PeerClosed (PeerClosedRequest) returns (PeerClosedResponse) {}
 }

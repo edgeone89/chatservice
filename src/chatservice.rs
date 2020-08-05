@@ -43,6 +43,30 @@ pub struct NewMessageResponse {
     pub message: std::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NewCollectiveMessageRequest {
+    #[prost(string, tag = "1")]
+    pub user_id: std::string::String,
+    #[prost(string, tag = "2")]
+    pub message: std::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NewCollectiveMessageResponse {
+    #[prost(int32, tag = "1")]
+    pub response_code: i32,
+    #[prost(string, tag = "2")]
+    pub message: std::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct TypingMessageRequest {
+    #[prost(string, tag = "1")]
+    pub user_id: std::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct TypingMessageResponse {
+    #[prost(int32, tag = "1")]
+    pub response_code: i32,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PeerClosedRequest {
     #[prost(string, tag = "1")]
     pub user_id: std::string::String,
@@ -171,6 +195,24 @@ pub mod chat_server {
             &mut self,
             request: tonic::Request<super::NewMessageRequest>,
         ) -> Result<tonic::Response<Self::NewMessageStream>, tonic::Status>;
+        #[doc = "Server streaming response type for the NewCollectiveMessage method."]
+        type NewCollectiveMessageStream: Stream<Item = Result<super::NewCollectiveMessageResponse, tonic::Status>>
+            + Send
+            + Sync
+            + 'static;
+        async fn new_collective_message(
+            &mut self,
+            request: tonic::Request<super::NewCollectiveMessageRequest>,
+        ) -> Result<tonic::Response<Self::NewCollectiveMessageStream>, tonic::Status>;
+        #[doc = "Server streaming response type for the TypingMessage method."]
+        type TypingMessageStream: Stream<Item = Result<super::TypingMessageResponse, tonic::Status>>
+            + Send
+            + Sync
+            + 'static;
+        async fn typing_message(
+            &mut self,
+            request: tonic::Request<super::TypingMessageRequest>,
+        ) -> Result<tonic::Response<Self::TypingMessageStream>, tonic::Status>;
         async fn peer_closed(
             &mut self,
             request: tonic::Request<super::PeerClosedRequest>,
@@ -303,6 +345,83 @@ pub mod chat_server {
                         let interceptor = inner.1.clone();
                         let inner = inner.0;
                         let method = NewMessageSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = if let Some(interceptor) = interceptor {
+                            tonic::server::Grpc::with_interceptor(codec, interceptor)
+                        } else {
+                            tonic::server::Grpc::new(codec)
+                        };
+                        let res = grpc.server_streaming(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/chatservice.Chat/NewCollectiveMessage" => {
+                    #[allow(non_camel_case_types)]
+                    struct NewCollectiveMessageSvc<T: Chat>(pub Arc<Mutex<T>>);
+                    impl<T: Chat>
+                        tonic::server::ServerStreamingService<super::NewCollectiveMessageRequest>
+                        for NewCollectiveMessageSvc<T>
+                    {
+                        type Response = super::NewCollectiveMessageResponse;
+                        type ResponseStream = T::NewCollectiveMessageStream;
+                        type Future =
+                            BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::NewCollectiveMessageRequest>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move { 
+                                let mut tmp_inner = inner.lock().await;
+                                tmp_inner.new_collective_message(request).await
+                             };
+                            Box::pin(fut)
+                        }
+                    }
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let interceptor = inner.1;
+                        let inner = inner.0;
+                        let method = NewCollectiveMessageSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = if let Some(interceptor) = interceptor {
+                            tonic::server::Grpc::with_interceptor(codec, interceptor)
+                        } else {
+                            tonic::server::Grpc::new(codec)
+                        };
+                        let res = grpc.server_streaming(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/chatservice.Chat/TypingMessage" => {
+                    #[allow(non_camel_case_types)]
+                    struct TypingMessageSvc<T: Chat>(pub Arc<Mutex<T>>);
+                    impl<T: Chat> tonic::server::ServerStreamingService<super::TypingMessageRequest>
+                        for TypingMessageSvc<T>
+                    {
+                        type Response = super::TypingMessageResponse;
+                        type ResponseStream = T::TypingMessageStream;
+                        type Future =
+                            BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::TypingMessageRequest>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move { 
+                                let mut tmp_inner = inner.lock().await;
+                                tmp_inner.typing_message(request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let interceptor = inner.1;
+                        let inner = inner.0;
+                        let method = TypingMessageSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = if let Some(interceptor) = interceptor {
                             tonic::server::Grpc::with_interceptor(codec, interceptor)
