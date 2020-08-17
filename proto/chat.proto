@@ -16,8 +16,9 @@ message NewPeerResponse{
 
 message SearchingPeerRequest {
     string user_id = 1;
-    int32 radius_distance_in_meters = 2;//todo: replace radius distance with latitude and longitude
+    int32 radius_distance_in_meters = 2;
     string status = 3;
+    //todo: add latitude and longitude
 }
 
 message SearchingPeerResponse {
@@ -30,6 +31,7 @@ message SearchingPeerResponse {
 message NewMessageRequest {
     string user_id = 1;
     string message = 2;
+    string to_user_id = 3;
 }
 
 message NewMessageResponse {
@@ -49,17 +51,25 @@ message NewCollectiveMessageResponse {
 
 message TypingMessageRequest {
     string user_id = 1;
+    string to_user_id = 2;
 }
 
 message TypingMessageResponse {
     int32 response_code = 1;
 }
 
-message ChatClosedRequest {}
+message ChatClosedRequest {
+    string user_id = 1;
+    bool is_closed = 2;
+    string to_user_id = 3;
+}
 
 message ChatClosedResponse {}
 
-message CollectiveChatClosedRequest {}
+message CollectiveChatClosedRequest {
+    string user_id = 1;
+    bool is_closed = 2;
+}
 
 message CollectiveChatClosedResponse {}
 

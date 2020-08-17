@@ -34,6 +34,8 @@ pub struct NewMessageRequest {
     pub user_id: std::string::String,
     #[prost(string, tag = "2")]
     pub message: std::string::String,
+    #[prost(string, tag = "3")]
+    pub to_user_id: std::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NewMessageResponse {
@@ -60,12 +62,34 @@ pub struct NewCollectiveMessageResponse {
 pub struct TypingMessageRequest {
     #[prost(string, tag = "1")]
     pub user_id: std::string::String,
+    #[prost(string, tag = "2")]
+    pub to_user_id: std::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TypingMessageResponse {
     #[prost(int32, tag = "1")]
     pub response_code: i32,
 }
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ChatClosedRequest {
+    #[prost(string, tag = "1")]
+    pub user_id: std::string::String,
+    #[prost(bool, tag = "2")]
+    pub is_closed: bool,
+    #[prost(string, tag = "3")]
+    pub to_user_id: std::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ChatClosedResponse {}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CollectiveChatClosedRequest {
+    #[prost(string, tag = "1")]
+    pub user_id: std::string::String,
+    #[prost(bool, tag = "2")]
+    pub is_closed: bool,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CollectiveChatClosedResponse {}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PeerClosedRequest {
     #[prost(string, tag = "1")]
@@ -213,6 +237,23 @@ pub mod chat_server {
             &mut self,
             request: tonic::Request<super::TypingMessageRequest>,
         ) -> Result<tonic::Response<Self::TypingMessageStream>, tonic::Status>;
+        #[doc = "Server streaming response type for the ChatClosed method."]
+        type ChatClosedStream: Stream<Item = Result<super::ChatClosedResponse, tonic::Status>>
+            + Send
+            + Sync
+            + 'static;
+        async fn chat_closed(
+            &mut self,
+            request: tonic::Request<super::ChatClosedRequest>,
+        ) -> Result<tonic::Response<Self::ChatClosedStream>, tonic::Status>;
+        type CollectiveChatClosedStream: Stream<Item = Result<super::CollectiveChatClosedResponse, tonic::Status>>
+            + Send
+            + Sync
+            + 'static;
+        async fn collective_chat_closed(
+            &mut self,
+            request: tonic::Request<super::CollectiveChatClosedRequest>,
+        ) -> Result<tonic::Response<Self::CollectiveChatClosedStream>, tonic::Status>;
         async fn peer_closed(
             &mut self,
             request: tonic::Request<super::PeerClosedRequest>,
@@ -422,6 +463,81 @@ pub mod chat_server {
                         let interceptor = inner.1;
                         let inner = inner.0;
                         let method = TypingMessageSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = if let Some(interceptor) = interceptor {
+                            tonic::server::Grpc::with_interceptor(codec, interceptor)
+                        } else {
+                            tonic::server::Grpc::new(codec)
+                        };
+                        let res = grpc.server_streaming(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/chatservice.Chat/ChatClosed" => {
+                    #[allow(non_camel_case_types)]
+                    struct ChatClosedSvc<T: Chat>(pub Arc<Mutex<T>>);
+                    impl<T: Chat> tonic::server::ServerStreamingService<super::ChatClosedRequest> for ChatClosedSvc<T> {
+                        type Response = super::ChatClosedResponse;
+                        type ResponseStream = T::ChatClosedStream;
+                        type Future =
+                            BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::ChatClosedRequest>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move { 
+                                let mut tmp_inner = inner.lock().await;
+                                tmp_inner.chat_closed(request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let interceptor = inner.1;
+                        let inner = inner.0;
+                        let method = ChatClosedSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = if let Some(interceptor) = interceptor {
+                            tonic::server::Grpc::with_interceptor(codec, interceptor)
+                        } else {
+                            tonic::server::Grpc::new(codec)
+                        };
+                        let res = grpc.server_streaming(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/chatservice.Chat/CollectiveChatClosed" => {
+                    #[allow(non_camel_case_types)]
+                    struct CollectiveChatClosedSvc<T: Chat>(pub Arc<Mutex<T>>);
+                    impl<T: Chat>
+                        tonic::server::ServerStreamingService<super::CollectiveChatClosedRequest>
+                        for CollectiveChatClosedSvc<T>
+                    {
+                        type Response = super::CollectiveChatClosedResponse;
+                        type ResponseStream = T::CollectiveChatClosedStream;
+                        type Future =
+                            BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::CollectiveChatClosedRequest>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move { 
+                                let mut tmp_inner = inner.lock().await;
+                                tmp_inner.collective_chat_closed(request).await
+                             };
+                            Box::pin(fut)
+                        }
+                    }
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let interceptor = inner.1;
+                        let inner = inner.0;
+                        let method = CollectiveChatClosedSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = if let Some(interceptor) = interceptor {
                             tonic::server::Grpc::with_interceptor(codec, interceptor)

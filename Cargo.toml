@@ -18,3 +18,13 @@ tokio = { version = "0.2", features = ["rt-threaded", "time", "stream", "fs", "m
 
 [build-dependencies]
 tonic-build = "0.2.0"
+
+[profile.release]
+opt-level = 'z'
+lto = true # enable link time optimization
+panic = "abort" # disable stack unwinding on panic
+
+[profile.dev]
+opt-level = 'z'
+lto = true # enable link time optimization
+panic = "abort" # disable stack unwinding on panic
