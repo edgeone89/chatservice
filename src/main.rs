@@ -1,10 +1,17 @@
+#![allow(non_snake_case)]
 use tonic::{transport::Server, Request, Response, Status};
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::Sender;
+use tokio::sync::mpsc::Receiver;
+use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::UnboundedReceiver;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::VecDeque;
-
+use std::sync::mpsc::Sender as stdSender;
+use std::sync::mpsc::Receiver as stdReceiver;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 /*pub mod chatservice {
     tonic::include_proto!("chatservice");
 }*/
@@ -16,6 +23,10 @@ use chatservice::{NewPeerRequest, NewPeerResponse, SearchingPeerRequest, Searchi
     NewCollectiveMessageResponse, TypingMessageRequest, TypingMessageResponse, 
     ChatClosedRequest, ChatClosedResponse, CollectiveChatClosedRequest, 
     CollectiveChatClosedResponse, PeerClosedRequest, PeerClosedResponse};
+
+mod pushnotificationsservice;
+use pushnotificationsservice::push_notifications_client::PushNotificationsClient;
+use pushnotificationsservice::PushNotificationRequest;
 
 struct ConnectedClient {
     user_id: String,
@@ -34,7 +45,7 @@ struct ConnectedPeerToPeer {//1-to-1 relation for personal chat
 }
 
 #[derive(Default)]
-pub struct MyChat {
+pub struct HABChat {
     connected_clients: HashSet<String>,
     searching_peers: HashMap<String, SearchingPeer>,
     connected_peer_to_peer: HashMap<String, String>,
@@ -44,11 +55,10 @@ pub struct MyChat {
     typing_message_senders: HashMap<String, Sender<Result<TypingMessageResponse, Status>>>,
     chat_closed_clients: HashMap<String, Sender<Result<ChatClosedResponse, Status>>>,
     collective_chat_closed_clients: HashMap<String, Sender<Result<CollectiveChatClosedResponse, Status>>>,
-    pending_messages: HashMap<String, VecDeque<String>>//todo: save not sent messages to the queue
-}
+} 
 
 #[tonic::async_trait]
-impl Chat for MyChat {
+impl Chat for HABChat {
 
     async fn new_peer(&mut self, request: Request<NewPeerRequest>)-> Result<Response<NewPeerResponse>, Status>
     {
@@ -197,24 +207,6 @@ impl Chat for MyChat {
 
         if message_from_request == "" {
             self.personal_chat_message_senders.entry(user_id_from_request.clone()).or_insert(tx.clone());
-            if self.pending_messages.contains_key(&user_id_from_request) == true {
-                let messages = self.pending_messages.get_mut(&user_id_from_request);
-                if let Some(msgs) = messages {
-                    while msgs.len() > 0 {
-                        let message = msgs.pop_front();
-                        if let Some(msg) = message {
-                            let reply = chatservice::NewMessageResponse {
-                                response_code: 1,
-                                message: msg
-                            };
-                            let mut tx_tmp = tx.clone();
-                            tokio::spawn(async move {
-                                tx_tmp.send(Ok(reply)).await;
-                            });
-                        }
-                    }
-                }
-            }
         } else {
             if self.connected_clients.contains(&user_id2_from_request) == true
             {
@@ -234,47 +226,32 @@ impl Chat for MyChat {
                                 tx_tmp.send(Ok(reply)).await;
                             });
                         } else {
-                            if self.pending_messages.contains_key(&user_id2_from_request) == true {
-                                println!("if self.pending_messages.contains_key(&user_id2_from_request) == true");
-                                let messages = self.pending_messages.get_mut(&user_id2_from_request);
-                                if let Some(msgs) = messages {
-                                    msgs.push_back(message_from_request);// fixme: insertion order is not kept
-                                }
-                            } else {
-                                println!("else");
-                                let mut messages:VecDeque<String> = VecDeque::new();
-                                messages.push_back(message_from_request);
-                                self.pending_messages.insert(user_id2_from_request, messages);// fixme: insertion order is not kept
-                            }
+                            let mut client = PushNotificationsClient::connect("http://192.168.0.100:50052").await.unwrap();
+                            let request = Request::new(PushNotificationRequest{
+                                user_id: user_id_from_request,
+                                message: message_from_request,
+                                to_user_id: user_id2_from_request
+                            });
+                            client.send_push_notification(request).await;
                         }
                     }
                 } else {
-                    if self.pending_messages.contains_key(&user_id2_from_request) == true {
-                        println!("if self.pending_messages.contains_key(&user_id2_from_request) == true");
-                        let messages = self.pending_messages.get_mut(&user_id2_from_request);
-                        if let Some(msgs) = messages {
-                            msgs.push_back(message_from_request);// fixme: insertion order is not kept
-                        }
-                    } else {
-                        println!("else");
-                        let mut messages:VecDeque<String> = VecDeque::new();
-                        messages.push_back(message_from_request);
-                        self.pending_messages.insert(user_id2_from_request, messages);// fixme: insertion order is not kept
-                    }
+                    let mut client = PushNotificationsClient::connect("http://192.168.0.100:50052").await.unwrap();
+                    let request = Request::new(PushNotificationRequest{
+                        user_id: user_id_from_request,
+                        message: message_from_request,
+                        to_user_id: user_id2_from_request
+                    });
+                    client.send_push_notification(request).await;
                 }
             } else {
-                if self.pending_messages.contains_key(&user_id2_from_request) == true {
-                    println!("if self.pending_messages.contains_key(&user_id2_from_request) == true");
-                    let messages = self.pending_messages.get_mut(&user_id2_from_request);
-                    if let Some(msgs) = messages {
-                        msgs.push_back(message_from_request);// fixme: insertion order is not kept
-                    }
-                } else {
-                    println!("else");
-                    let mut messages:VecDeque<String> = VecDeque::new();
-                    messages.push_back(message_from_request);
-                    self.pending_messages.insert(user_id2_from_request, messages);// fixme: insertion order is not kept
-                }
+                let mut client = PushNotificationsClient::connect("http://192.168.0.100:50052").await.unwrap();
+                let request = Request::new(PushNotificationRequest{
+                    user_id: user_id_from_request,
+                    message: message_from_request,
+                    to_user_id: user_id2_from_request
+                });
+                client.send_push_notification(request).await;
             }
         }
         return Ok(Response::new(rx));
@@ -589,11 +566,12 @@ fn compute_distance(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let addr = "192.168.0.100:50051".parse().unwrap();
-    let chat = MyChat::default();
+    let addr = "192.168.0.100:50051".parse()?;
+    let chat = HABChat::default();
     //chat.searching_peers = HashMap::new();
     //chat.connected_peers_to_peers = Vec::new();
     //chat.connected_clients = HashMap::new();
+    //chat.pending_messages = HashMap::new();
 
     println!("ChatServer listening on {}", addr);
 
