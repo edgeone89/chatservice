@@ -16,9 +16,10 @@ message NewPeerResponse{
 
 message SearchingPeerRequest {
     string user_id = 1;
-    int32 radius_distance_in_meters = 2;
-    string status = 3;
-    //todo: add latitude and longitude
+    string status = 2;
+    double latitude = 3;
+    double longitude = 4;
+    int32 searching_in_radius_in_meters = 5;
 }
 
 message SearchingPeerResponse {
@@ -73,11 +74,29 @@ message CollectiveChatClosedRequest {
 
 message CollectiveChatClosedResponse {}
 
+message AdminStatusRequest {
+    string user_id = 1;
+    bool is_admin_on = 2;
+}
+
+message AdminStatusResponse{
+    int32 response_code = 1;
+}
+
 message PeerClosedRequest{
     string user_id = 1;
 }
 
 message PeerClosedResponse{
+    int32 response_code = 1;
+}
+
+message BlockUserInCollectiveChatRequest{
+    string user_id = 1;
+    string blocking_time = 2; // 1h or 3h or 5h or always
+}
+
+message BlockUserInCollectiveChatResponse {
     int32 response_code = 1;
 }
 
@@ -90,4 +109,6 @@ service Chat {
     rpc ChatClosed(ChatClosedRequest) returns(stream ChatClosedResponse){}
     rpc CollectiveChatClosed(CollectiveChatClosedRequest) returns(stream CollectiveChatClosedResponse){}
     rpc PeerClosed (PeerClosedRequest) returns (PeerClosedResponse) {}
+    rpc AdminStatus(AdminStatusRequest)returns (AdminStatusResponse){}
+    rpc BlockUserInCollectiveChat(BlockUserInCollectiveChatRequest) returns (stream BlockUserInCollectiveChatResponse) {}
 }

@@ -16,13 +16,17 @@ use tokio::sync::Mutex;
     tonic::include_proto!("chatservice");
 }*/
 
+const PUSH_NOTIFITCATION_SERVER_ADDRESS: &str = "http://192.168.0.100:50052";
+
 mod chatservice;
 use chatservice::chat_server::{Chat, ChatServer};
 use chatservice::{NewPeerRequest, NewPeerResponse, SearchingPeerRequest, SearchingPeerResponse, 
     NewMessageRequest, NewMessageResponse, NewCollectiveMessageRequest,
     NewCollectiveMessageResponse, TypingMessageRequest, TypingMessageResponse, 
     ChatClosedRequest, ChatClosedResponse, CollectiveChatClosedRequest, 
-    CollectiveChatClosedResponse, PeerClosedRequest, PeerClosedResponse};
+    CollectiveChatClosedResponse, PeerClosedRequest, PeerClosedResponse,
+    AdminStatusRequest, AdminStatusResponse, BlockUserInCollectiveChatRequest,
+    BlockUserInCollectiveChatResponse};
 
 mod pushnotificationsservice;
 use pushnotificationsservice::push_notifications_client::PushNotificationsClient;
@@ -34,8 +38,10 @@ struct ConnectedClient {
 }
 
 struct SearchingPeer {
-    radius_distance_in_meters: i32,//replace radius_distance_in_meters with lat, lng
+    lat: f64,
+    lng: f64,
     status: String,
+    searching_in_radius_in_meters: i32,
     tx: Sender<Result<SearchingPeerResponse, Status>>
 }
 
@@ -44,8 +50,15 @@ struct ConnectedPeerToPeer {//1-to-1 relation for personal chat
     user_id2: String,
 }
 
+enum UserBlockTime {
+    OneHour,
+    TreeHours,
+    FiveHours,
+    Forever
+}
+
 #[derive(Default)]
-pub struct HABChat {
+struct HABChat {
     connected_clients: HashSet<String>,
     searching_peers: HashMap<String, SearchingPeer>,
     connected_peer_to_peer: HashMap<String, String>,
@@ -85,13 +98,16 @@ impl Chat for HABChat {
         let (mut tx, rx) = mpsc::channel(4);
 
         let user_id_from_request = request.get_ref().user_id.clone();
-        // todo: replace radius distance with latitude longitude coordinates
-        let radius_distance_in_meters_from_request = request.get_ref().radius_distance_in_meters;
+        let lat_from_request = request.get_ref().latitude;
+        let lng_from_request = request.get_ref().longitude;
         let status_from_request = request.get_ref().status.clone();
+        let searching_in_radius_in_meters = request.get_ref().searching_in_radius_in_meters;
         
         let new_searching_peer = SearchingPeer{
-            radius_distance_in_meters: radius_distance_in_meters_from_request,
+            lat: lat_from_request,
+            lng: lng_from_request,
             status: status_from_request.clone(),
+            searching_in_radius_in_meters: searching_in_radius_in_meters,
             tx: tx.clone()
         };
         self.searching_peers.entry(user_id_from_request.clone()).or_insert(new_searching_peer);
@@ -103,7 +119,13 @@ impl Chat for HABChat {
         for (key, val) in &self.searching_peers {
             if &user_id_from_request != key {
                 // todo: change radius distance to latitude longitude coords
-                if radius_distance_in_meters_from_request == (*val).radius_distance_in_meters {
+                let lat1 = lat_from_request;
+                let lon1 = lng_from_request;
+                let lat2 = (*val).lat;
+                let lon2 = (*val).lng;
+                let actual_radiuse_between_peers = 10;//todo: compute_distance(lat1, lon1, lat2, lon2) as i32;
+                if actual_radiuse_between_peers <= searching_in_radius_in_meters {
+                    
                     /*let new_connected_peer_to_peer = ConnectedPeerToPeer{
                         user_id1: user_id_from_request.clone(),
                         user_id2: (*key).clone()
@@ -131,7 +153,7 @@ impl Chat for HABChat {
                     found_peer_id = (*key).clone();
 
                     let peer_id: String = (*key).clone();
-                    let peer_radius_distance_in_meters = (*val).radius_distance_in_meters;
+                    let peer_radius_distance_in_meters = searching_in_radius_in_meters;
                     let peer_status = (*val).status.clone();
                     let reply_to_peer1 = chatservice::SearchingPeerResponse {
                         response_code: 1,
@@ -147,7 +169,7 @@ impl Chat for HABChat {
                     });
 
                     let peer2_id: String = user_id_from_request.clone();
-                    let peer2_radius_distance_in_meters = radius_distance_in_meters_from_request;
+                    let peer2_radius_distance_in_meters = searching_in_radius_in_meters;
                     let peer2_status = status_from_request.clone();
                     let reply_to_peer2 = chatservice::SearchingPeerResponse {
                         response_code: 1,
@@ -174,7 +196,7 @@ impl Chat for HABChat {
             });*/
         } else {
             tokio::spawn(async move {
-                for _ in 0..1 {
+                for _ in 0i32..1 {
                     let reply = chatservice::SearchingPeerResponse {
                         response_code: 2,
                         user_id: "no_user_id".to_string(),
@@ -226,7 +248,7 @@ impl Chat for HABChat {
                                 tx_tmp.send(Ok(reply)).await;
                             });
                         } else {
-                            let mut client = PushNotificationsClient::connect("http://192.168.0.100:50052").await.unwrap();
+                            let mut client = PushNotificationsClient::connect(PUSH_NOTIFITCATION_SERVER_ADDRESS).await.unwrap();
                             let request = Request::new(PushNotificationRequest{
                                 user_id: user_id_from_request,
                                 message: message_from_request,
@@ -236,7 +258,7 @@ impl Chat for HABChat {
                         }
                     }
                 } else {
-                    let mut client = PushNotificationsClient::connect("http://192.168.0.100:50052").await.unwrap();
+                    let mut client = PushNotificationsClient::connect(PUSH_NOTIFITCATION_SERVER_ADDRESS).await.unwrap();
                     let request = Request::new(PushNotificationRequest{
                         user_id: user_id_from_request,
                         message: message_from_request,
@@ -245,7 +267,7 @@ impl Chat for HABChat {
                     client.send_push_notification(request).await;
                 }
             } else {
-                let mut client = PushNotificationsClient::connect("http://192.168.0.100:50052").await.unwrap();
+                let mut client = PushNotificationsClient::connect(PUSH_NOTIFITCATION_SERVER_ADDRESS).await.unwrap();
                 let request = Request::new(PushNotificationRequest{
                     user_id: user_id_from_request,
                     message: message_from_request,
@@ -465,6 +487,27 @@ impl Chat for HABChat {
             response_code: 1
         };
         return Ok(Response::new(reply));
+    }
+
+    async fn admin_status(
+        &mut self,
+        request: Request<AdminStatusRequest>,
+    ) -> Result<Response<AdminStatusResponse>, Status> {
+        let reply = chatservice::AdminStatusResponse {
+            response_code: 1
+        };
+        return Ok(Response::new(reply));
+    }
+
+    type BlockUserInCollectiveChatStream = mpsc::Receiver<Result<BlockUserInCollectiveChatResponse, Status>>;
+    async fn block_user_in_collective_chat(
+        &self,
+        request: Request<BlockUserInCollectiveChatRequest>,
+    ) -> Result<Response<Self::BlockUserInCollectiveChatStream>, Status> {
+        let (tx, rx) = mpsc::channel(4);
+
+        
+        return Ok(Response::new(rx));
     }
 }
 
