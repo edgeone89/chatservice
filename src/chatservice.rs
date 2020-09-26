@@ -54,6 +54,12 @@ pub struct NewCollectiveMessageRequest {
     pub user_id: std::string::String,
     #[prost(string, tag = "2")]
     pub message: std::string::String,
+    #[prost(string, tag = "3")]
+    pub admin_id: std::string::String,
+    #[prost(string, tag = "4")]
+    pub user_name: std::string::String,
+    #[prost(bool, tag = "5")]
+    pub is_admin: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NewCollectiveMessageResponse {
@@ -61,6 +67,10 @@ pub struct NewCollectiveMessageResponse {
     pub response_code: i32,
     #[prost(string, tag = "2")]
     pub message: std::string::String,
+    #[prost(string, tag = "3")]
+    pub user_name: std::string::String,
+    #[prost(string, tag = "4")]
+    pub user_id: std::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TypingMessageRequest {
@@ -119,16 +129,79 @@ pub struct PeerClosedResponse {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BlockUserInCollectiveChatRequest {
     #[prost(string, tag = "1")]
-    pub user_id: std::string::String,
-    /// 1h or 3h or 5h or always
+    pub admin_id: std::string::String,
     #[prost(string, tag = "2")]
+    pub blocked_user_id: std::string::String,
+    /// 1h or 3h or 5h or always
+    #[prost(string, tag = "3")]
     pub blocking_time: std::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BlockUserInCollectiveChatResponse {
     #[prost(int32, tag = "1")]
     pub response_code: i32,
+    #[prost(string, tag = "2")]
+    pub blocking_time: std::string::String,
+    #[prost(string, tag = "3")]
+    pub admin_id: std::string::String,
 }
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ClearCollectiveChatRequest {
+    #[prost(string, tag = "1")]
+    pub admin_id: std::string::String,
+    #[prost(bool, tag = "2")]
+    pub clear_chat: bool,
+    #[prost(string, tag = "3")]
+    pub user_id: std::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ClearCollectiveChatResponse {}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct BlockUserInPersonalChatRequest {
+    #[prost(string, tag = "1")]
+    pub user_id: std::string::String,
+    #[prost(string, tag = "2")]
+    pub blocked_user_id: std::string::String,
+    /// 1h or 3h or 5h or always
+    #[prost(string, tag = "3")]
+    pub blocking_time: std::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct BlockUserInPersonalChatResponse {
+    #[prost(int32, tag = "1")]
+    pub response_code: i32,
+    #[prost(string, tag = "2")]
+    pub blocking_time: std::string::String,
+    #[prost(string, tag = "3")]
+    pub user_id: std::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ClearPersonalChatRequest {
+    #[prost(string, tag = "1")]
+    pub user_id: std::string::String,
+    #[prost(bool, tag = "2")]
+    pub clear_chat: bool,
+    #[prost(string, tag = "3")]
+    pub admin_id: std::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ClearPersonalChatResponse {
+    #[prost(int32, tag = "1")]
+    pub response_code: i32,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ReportUserRequest {
+    #[prost(string, tag = "1")]
+    pub user_id: std::string::String,
+    #[prost(string, tag = "2")]
+    pub reported_user_id: std::string::String,
+    #[prost(bool, tag = "3")]
+    pub report_user: bool,
+    #[prost(string, tag = "4")]
+    pub message: std::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ReportUserResponse {}
 #[doc = r" Generated client implementations."]
 pub mod chat_client {
     #![allow(unused_variables, dead_code, missing_docs)]
@@ -297,9 +370,41 @@ pub mod chat_server {
             + Sync
             + 'static;
         async fn block_user_in_collective_chat(
-            &self,
+            &mut self,
             request: tonic::Request<super::BlockUserInCollectiveChatRequest>,
         ) -> Result<tonic::Response<Self::BlockUserInCollectiveChatStream>, tonic::Status>;
+        #[doc = "Server streaming response type for the ClearCollectiveChat method."]
+        type ClearCollectiveChatStream: Stream<Item = Result<super::ClearCollectiveChatResponse, tonic::Status>>
+            + Send
+            + Sync
+            + 'static;
+        async fn clear_collective_chat(
+            &mut self,
+            request: tonic::Request<super::ClearCollectiveChatRequest>,
+        ) -> Result<tonic::Response<Self::ClearCollectiveChatStream>, tonic::Status>;
+        #[doc = "Server streaming response type for the BlockUserInPersonalChat method."]
+        type BlockUserInPersonalChatStream: Stream<Item = Result<super::BlockUserInPersonalChatResponse, tonic::Status>>
+            + Send
+            + Sync
+            + 'static;
+        async fn block_user_in_personal_chat(
+            &mut self,
+            request: tonic::Request<super::BlockUserInPersonalChatRequest>,
+        ) -> Result<tonic::Response<Self::BlockUserInPersonalChatStream>, tonic::Status>;
+        #[doc = "Server streaming response type for the ClearPersonalChat method."]
+        type ClearPersonalChatStream: Stream<Item = Result<super::ClearPersonalChatResponse, tonic::Status>>
+            + Send
+            + Sync
+            + 'static;
+        async fn clear_personal_chat(
+            &mut self,
+            request: tonic::Request<super::ClearPersonalChatRequest>,
+        ) -> Result<tonic::Response<Self::ClearPersonalChatStream>, tonic::Status>;
+        #[doc = "Server response type for the ReportUserInProfileChat method."]
+        async fn report_user(
+            &self,
+            request: tonic::Request<super::ReportUserRequest>,
+        ) -> Result<tonic::Response<super::ReportUserResponse>, tonic::Status>;
     }
     #[derive(Debug)]
     #[doc(hidden)]
@@ -696,6 +801,158 @@ pub mod chat_server {
                             tonic::server::Grpc::new(codec)
                         };
                         let res = grpc.server_streaming(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/chatservice.Chat/ClearCollectiveChat" => {
+                    #[allow(non_camel_case_types)]
+                    struct ClearCollectiveChatSvc<T: Chat>(pub Arc<Mutex<T>>);
+                    impl<T: Chat>
+                        tonic::server::ServerStreamingService<super::ClearCollectiveChatRequest>
+                        for ClearCollectiveChatSvc<T>
+                    {
+                        type Response = super::ClearCollectiveChatResponse;
+                        type ResponseStream = T::ClearCollectiveChatStream;
+                        type Future =
+                            BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::ClearCollectiveChatRequest>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move { 
+                                let mut tmp_inner = inner.lock().await;
+                                tmp_inner.clear_collective_chat(request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let interceptor = inner.1;
+                        let inner = inner.0;
+                        let method = ClearCollectiveChatSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = if let Some(interceptor) = interceptor {
+                            tonic::server::Grpc::with_interceptor(codec, interceptor)
+                        } else {
+                            tonic::server::Grpc::new(codec)
+                        };
+                        let res = grpc.server_streaming(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/chatservice.Chat/BlockUserInPersonalChat" => {
+                    #[allow(non_camel_case_types)]
+                    struct BlockUserInPersonalChatSvc<T: Chat>(pub Arc<Mutex<T>>);
+                    impl<T: Chat>
+                        tonic::server::ServerStreamingService<super::BlockUserInPersonalChatRequest>
+                        for BlockUserInPersonalChatSvc<T>
+                    {
+                        type Response = super::BlockUserInPersonalChatResponse;
+                        type ResponseStream = T::BlockUserInPersonalChatStream;
+                        type Future =
+                            BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::BlockUserInPersonalChatRequest>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut =
+                                async move { 
+                                    let mut tmp_inner = inner.lock().await;
+                                    tmp_inner.block_user_in_personal_chat(request).await
+                                };
+                            Box::pin(fut)
+                        }
+                    }
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let interceptor = inner.1;
+                        let inner = inner.0;
+                        let method = BlockUserInPersonalChatSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = if let Some(interceptor) = interceptor {
+                            tonic::server::Grpc::with_interceptor(codec, interceptor)
+                        } else {
+                            tonic::server::Grpc::new(codec)
+                        };
+                        let res = grpc.server_streaming(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/chatservice.Chat/ClearPersonalChat" => {
+                    #[allow(non_camel_case_types)]
+                    struct ClearPersonalChatSvc<T: Chat>(pub Arc<Mutex<T>>);
+                    impl<T: Chat>
+                        tonic::server::ServerStreamingService<super::ClearPersonalChatRequest>
+                        for ClearPersonalChatSvc<T>
+                    {
+                        type Response = super::ClearPersonalChatResponse;
+                        type ResponseStream = T::ClearPersonalChatStream;
+                        type Future =
+                            BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::ClearPersonalChatRequest>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move {
+                                let mut tmp_inner = inner.lock().await;
+                                tmp_inner.clear_personal_chat(request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let interceptor = inner.1;
+                        let inner = inner.0;
+                        let method = ClearPersonalChatSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = if let Some(interceptor) = interceptor {
+                            tonic::server::Grpc::with_interceptor(codec, interceptor)
+                        } else {
+                            tonic::server::Grpc::new(codec)
+                        };
+                        let res = grpc.server_streaming(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/chatservice.Chat/ReportUser" => {
+                    #[allow(non_camel_case_types)]
+                    struct ReportUserSvc<T: Chat>(pub Arc<Mutex<T>>);
+                    impl<T: Chat> tonic::server::UnaryService<super::ReportUserRequest> for ReportUserSvc<T> {
+                        type Response = super::ReportUserResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::ReportUserRequest>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move {
+                                let mut tmp_inner = inner.lock().await;
+                                tmp_inner.report_user(request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let interceptor = inner.1.clone();
+                        let inner = inner.0;
+                        let method = ReportUserSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = if let Some(interceptor) = interceptor {
+                            tonic::server::Grpc::with_interceptor(codec, interceptor)
+                        } else {
+                            tonic::server::Grpc::new(codec)
+                        };
+                        let res = grpc.unary(method, req).await;
                         Ok(res)
                     };
                     Box::pin(fut)

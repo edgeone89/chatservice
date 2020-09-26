@@ -43,11 +43,16 @@ message NewMessageResponse {
 message NewCollectiveMessageRequest {
     string user_id = 1;
     string message = 2;
+    string admin_id = 3;
+    string user_name = 4;
+    bool is_admin = 5;
 }
 
 message NewCollectiveMessageResponse {
     int32 response_code = 1;
     string message = 2;
+    string user_name = 3;
+    string user_id = 4;
 }
 
 message TypingMessageRequest {
@@ -92,12 +97,58 @@ message PeerClosedResponse{
 }
 
 message BlockUserInCollectiveChatRequest{
-    string user_id = 1;
-    string blocking_time = 2; // 1h or 3h or 5h or always
+    string admin_id = 1;
+    string blocked_user_id = 2;
+    string blocking_time = 3; // 1h or 3h or 5h or always
 }
 
 message BlockUserInCollectiveChatResponse {
     int32 response_code = 1;
+    string blocking_time = 2;
+    string admin_id = 3;
+}
+
+message ClearCollectiveChatRequest {
+    string admin_id = 1;
+    bool clear_chat = 2;
+    string user_id = 3;
+}
+
+message ClearCollectiveChatResponse {
+
+}
+
+message BlockUserInPersonalChatRequest {
+    string user_id = 1;
+    string blocked_user_id = 2;
+    string blocking_time = 3; // 1h or 3h or 5h or always
+}
+
+message BlockUserInPersonalChatResponse {
+    int32 response_code = 1;
+    string blocking_time = 2;
+    string user_id = 3;
+}
+
+message ClearPersonalChatRequest {
+    string user_id = 1;
+    bool clear_chat = 2;
+    string admin_id = 3;
+}
+
+message ClearPersonalChatResponse {
+    int32 response_code = 1;
+}
+
+message ReportUserRequest {
+    string user_id = 1;
+    string reported_user_id = 2;
+    bool report_user = 3;
+    string message = 4;
+}
+
+message ReportUserResponse {
+
 }
 
 service Chat {
@@ -111,4 +162,8 @@ service Chat {
     rpc PeerClosed (PeerClosedRequest) returns (PeerClosedResponse) {}
     rpc AdminStatus(AdminStatusRequest)returns (AdminStatusResponse){}
     rpc BlockUserInCollectiveChat(BlockUserInCollectiveChatRequest) returns (stream BlockUserInCollectiveChatResponse) {}
+    rpc ClearCollectiveChat(ClearCollectiveChatRequest) returns (stream ClearCollectiveChatResponse) {}
+    rpc BlockUserInPersonalChat(BlockUserInPersonalChatRequest) returns(stream BlockUserInPersonalChatResponse) {}
+    rpc ClearPersonalChat(ClearPersonalChatRequest) returns(stream ClearPersonalChatResponse) {}
+    rpc ReportUser(ReportUserRequest) returns(ReportUserResponse){}
 }
