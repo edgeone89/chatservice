@@ -20,6 +20,10 @@ pub struct SearchingPeerRequest {
     pub longitude: f64,
     #[prost(int32, tag = "5")]
     pub searching_in_radius_in_meters: i32,
+    #[prost(string, tag = "6")]
+    pub user_name: std::string::String,
+    #[prost(int32, tag = "7")]
+    pub status_color_id: i32,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SearchingPeerResponse {
@@ -31,6 +35,10 @@ pub struct SearchingPeerResponse {
     pub radius_distance_in_meters: i32,
     #[prost(string, tag = "4")]
     pub status: std::string::String,
+    #[prost(int32, tag = "5")]
+    pub status_color_id: i32,
+    #[prost(string, tag = "6")]
+    pub user_name: std::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NewMessageRequest {

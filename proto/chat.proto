@@ -20,6 +20,8 @@ message SearchingPeerRequest {
     double latitude = 3;
     double longitude = 4;
     int32 searching_in_radius_in_meters = 5;
+    string user_name = 6;
+    int32 status_color_id = 7;
 }
 
 message SearchingPeerResponse {
@@ -27,6 +29,8 @@ message SearchingPeerResponse {
     string user_id = 2;
     int32 radius_distance_in_meters = 3;
     string status = 4;
+    int32 status_color_id = 5;
+    string user_name = 6;
 }
 
 message NewMessageRequest {

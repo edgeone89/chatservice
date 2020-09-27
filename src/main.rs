@@ -51,7 +51,9 @@ struct SearchingPeer {
     lat: f64,
     lng: f64,
     status: String,
+    status_color_id: i32,
     searching_in_radius_in_meters: i32,
+    user_name: String,
     tx: Sender<Result<SearchingPeerResponse, Status>>
 }
 
@@ -117,16 +119,20 @@ impl Chat for HABChat {
         let (mut tx, rx) = mpsc::channel(4);
 
         let user_id_from_request = request.get_ref().user_id.clone();
+        let user_name_from_request = request.get_ref().user_name.clone();
         let lat_from_request = request.get_ref().latitude;
         let lng_from_request = request.get_ref().longitude;
         let status_from_request = request.get_ref().status.clone();
+        let status_color_id_from_request = request.get_ref().status_color_id;
         let searching_in_radius_in_meters = request.get_ref().searching_in_radius_in_meters;
         
         let new_searching_peer = SearchingPeer{
             lat: lat_from_request,
             lng: lng_from_request,
             status: status_from_request.clone(),
+            status_color_id: status_color_id_from_request,
             searching_in_radius_in_meters: searching_in_radius_in_meters,
+            user_name: user_name_from_request.clone(),
             tx: tx.clone()
         };
         self.searching_peers.entry(user_id_from_request.clone()).or_insert(new_searching_peer);
@@ -174,11 +180,15 @@ impl Chat for HABChat {
                     let peer_id: String = (*key).clone();
                     let peer_radius_distance_in_meters = searching_in_radius_in_meters;
                     let peer_status = (*val).status.clone();
+                    let peer_status_color_id = (*val).status_color_id;
+                    let peer_user_name = (*val).user_name.clone();
                     let reply_to_peer1 = chatservice::SearchingPeerResponse {
                         response_code: 1,
                         user_id: peer_id,
                         radius_distance_in_meters: peer_radius_distance_in_meters,
-                        status: peer_status
+                        status: peer_status,
+                        status_color_id: peer_status_color_id,
+                        user_name: peer_user_name
                     };
 
                     let mut tx_tmp = tx.clone();
@@ -190,11 +200,15 @@ impl Chat for HABChat {
                     let peer2_id: String = user_id_from_request.clone();
                     let peer2_radius_distance_in_meters = searching_in_radius_in_meters;
                     let peer2_status = status_from_request.clone();
+                    let peer2_status_color_id = status_color_id_from_request;
+                    let peer2_user_name = user_name_from_request.clone();
                     let reply_to_peer2 = chatservice::SearchingPeerResponse {
                         response_code: 1,
                         user_id: peer2_id,
                         radius_distance_in_meters: peer2_radius_distance_in_meters,
-                        status: peer2_status
+                        status: peer2_status,
+                        status_color_id: peer2_status_color_id,
+                        user_name: peer2_user_name
                     };
 
                     tx_tmp = (*val).tx.clone();
@@ -220,7 +234,9 @@ impl Chat for HABChat {
                         response_code: 2,
                         user_id: "no_user_id".to_string(),
                         radius_distance_in_meters: -1,
-                        status: "".to_string()
+                        status: "".to_string(),
+                        status_color_id: -1,
+                        user_name: "".to_string()
                     };
                     tx.send(Ok(reply)).await;
                 }
