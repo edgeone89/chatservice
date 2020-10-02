@@ -19,9 +19,11 @@ message SearchingPeerRequest {
     string status = 2;
     double latitude = 3;
     double longitude = 4;
-    int32 searching_in_radius_in_meters = 5;
+    int32 visible_in_radius_in_meters = 5;
     string user_name = 6;
     int32 status_color_id = 7;
+    string description = 8;
+    bool is_searching = 9;
 }
 
 message SearchingPeerResponse {
@@ -31,6 +33,7 @@ message SearchingPeerResponse {
     string status = 4;
     int32 status_color_id = 5;
     string user_name = 6;
+    string description = 7;
 }
 
 message NewMessageRequest {
@@ -155,6 +158,25 @@ message ReportUserResponse {
 
 }
 
+message UploadImageRequest {
+    string user_id = 1;
+    bytes file_chunk = 2;
+    string image_name = 3;
+}
+
+message UploadImageResponse {
+    
+}
+
+message DownloadImageRequest {
+    string user_id = 1;
+}
+
+message DownloadImageResponse {
+    int32 response_code = 1;
+    bytes file_chunk = 2;
+}
+
 service Chat {
     rpc NewPeer (NewPeerRequest) returns (NewPeerResponse) {}
     rpc SearchingPeer(SearchingPeerRequest) returns (stream SearchingPeerResponse) {}
@@ -170,4 +192,6 @@ service Chat {
     rpc BlockUserInPersonalChat(BlockUserInPersonalChatRequest) returns(stream BlockUserInPersonalChatResponse) {}
     rpc ClearPersonalChat(ClearPersonalChatRequest) returns(stream ClearPersonalChatResponse) {}
     rpc ReportUser(ReportUserRequest) returns(ReportUserResponse){}
+    rpc UploadImage(stream UploadImageRequest) returns(UploadImageResponse){}
+    rpc DownloadImage(DownloadImageRequest) returns(stream DownloadImageResponse){}
 }

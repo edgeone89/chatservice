@@ -19,11 +19,15 @@ pub struct SearchingPeerRequest {
     #[prost(double, tag = "4")]
     pub longitude: f64,
     #[prost(int32, tag = "5")]
-    pub searching_in_radius_in_meters: i32,
+    pub visible_in_radius_in_meters: i32,
     #[prost(string, tag = "6")]
     pub user_name: std::string::String,
     #[prost(int32, tag = "7")]
     pub status_color_id: i32,
+    #[prost(string, tag = "8")]
+    pub description: std::string::String,
+    #[prost(bool, tag = "9")]
+    pub is_searching: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SearchingPeerResponse {
@@ -39,6 +43,8 @@ pub struct SearchingPeerResponse {
     pub status_color_id: i32,
     #[prost(string, tag = "6")]
     pub user_name: std::string::String,
+    #[prost(string, tag = "7")]
+    pub description: std::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NewMessageRequest {
@@ -210,6 +216,29 @@ pub struct ReportUserRequest {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ReportUserResponse {}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct UploadImageRequest {
+    #[prost(string, tag = "1")]
+    pub user_id: std::string::String,
+    #[prost(bytes, tag = "2")]
+    pub file_chunk: std::vec::Vec<u8>,
+    #[prost(string, tag = "3")]
+    pub image_name: std::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct UploadImageResponse {}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DownloadImageRequest {
+    #[prost(string, tag = "1")]
+    pub user_id: std::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DownloadImageResponse {
+    #[prost(int32, tag = "1")]
+    pub response_code: i32,
+    #[prost(bytes, tag = "2")]
+    pub file_chunk: std::vec::Vec<u8>,
+}
 #[doc = r" Generated client implementations."]
 pub mod chat_client {
     #![allow(unused_variables, dead_code, missing_docs)]
@@ -413,6 +442,19 @@ pub mod chat_server {
             &self,
             request: tonic::Request<super::ReportUserRequest>,
         ) -> Result<tonic::Response<super::ReportUserResponse>, tonic::Status>;
+        async fn upload_image(
+            &mut self,
+            request: tonic::Request<tonic::Streaming<super::UploadImageRequest>>,
+        ) -> Result<tonic::Response<super::UploadImageResponse>, tonic::Status>;
+        #[doc = "Server streaming response type for the DownloadImage method."]
+        type DownloadImageStream: Stream<Item = Result<super::DownloadImageResponse, tonic::Status>>
+            + Send
+            + Sync
+            + 'static;
+        async fn download_image(
+            &self,
+            request: tonic::Request<super::DownloadImageRequest>,
+        ) -> Result<tonic::Response<Self::DownloadImageStream>, tonic::Status>;
     }
     #[derive(Debug)]
     #[doc(hidden)]
@@ -961,6 +1003,79 @@ pub mod chat_server {
                             tonic::server::Grpc::new(codec)
                         };
                         let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/chatservice.Chat/UploadImage" => {
+                    #[allow(non_camel_case_types)]
+                    struct UploadImageSvc<T: Chat>(pub Arc<Mutex<T>>);
+                    impl<T: Chat> tonic::server::ClientStreamingService<super::UploadImageRequest>
+                        for UploadImageSvc<T>
+                    {
+                        type Response = super::UploadImageResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<tonic::Streaming<super::UploadImageRequest>>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move {
+                                let mut tmp_inner = inner.lock().await;
+                                tmp_inner.upload_image(request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let interceptor = inner.1;
+                        let inner = inner.0;
+                        let method = UploadImageSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = if let Some(interceptor) = interceptor {
+                            tonic::server::Grpc::with_interceptor(codec, interceptor)
+                        } else {
+                            tonic::server::Grpc::new(codec)
+                        };
+                        let res = grpc.client_streaming(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/chatservice.Chat/DownloadImage" => {
+                    #[allow(non_camel_case_types)]
+                    struct DownloadImageSvc<T: Chat>(pub Arc<Mutex<T>>);
+                    impl<T: Chat> tonic::server::ServerStreamingService<super::DownloadImageRequest>
+                        for DownloadImageSvc<T>
+                    {
+                        type Response = super::DownloadImageResponse;
+                        type ResponseStream = T::DownloadImageStream;
+                        type Future =
+                            BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::DownloadImageRequest>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move { 
+                                let mut tmp_inner = inner.lock().await;
+                                tmp_inner.download_image(request).await };
+                            Box::pin(fut)
+                        }
+                    }
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let interceptor = inner.1;
+                        let inner = inner.0;
+                        let method = DownloadImageSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = if let Some(interceptor) = interceptor {
+                            tonic::server::Grpc::with_interceptor(codec, interceptor)
+                        } else {
+                            tonic::server::Grpc::new(codec)
+                        };
+                        let res = grpc.server_streaming(method, req).await;
                         Ok(res)
                     };
                     Box::pin(fut)

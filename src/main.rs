@@ -12,6 +12,12 @@ use std::sync::mpsc::Sender as stdSender;
 use std::sync::mpsc::Receiver as stdReceiver;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tokio::stream::StreamExt;
+use std::fs::File;
+use std::io::Write;
+use std::io::Read;
+use std::io::BufWriter;
+use std::io::BufReader;
 /*pub mod chatservice {
     tonic::include_proto!("chatservice");
 }*/
@@ -29,7 +35,8 @@ use chatservice::{NewPeerRequest, NewPeerResponse, SearchingPeerRequest, Searchi
     BlockUserInCollectiveChatResponse, ClearCollectiveChatRequest, ClearCollectiveChatResponse,
     BlockUserInPersonalChatRequest, BlockUserInPersonalChatResponse,
     ClearPersonalChatRequest, ClearPersonalChatResponse,
-    ReportUserRequest, ReportUserResponse
+    ReportUserRequest, ReportUserResponse,UploadImageRequest,UploadImageResponse,
+    DownloadImageRequest, DownloadImageResponse
 };
 
 mod pushnotificationsservice;
@@ -44,7 +51,9 @@ struct ConnectedClient {
     stream_blocked_in_personal_chat: Option<Sender<Result<BlockUserInPersonalChatResponse, Status>>>,
     stream_clear_collective_chat: Option<Sender<Result<ClearCollectiveChatResponse, Status>>>,
     stream_clear_personal_chat: Option<Sender<Result<ClearPersonalChatResponse, Status>>>,
-    collective_chat_closed_clients: Option<Sender<Result<CollectiveChatClosedResponse, Status>>>
+    collective_chat_closed_clients: Option<Sender<Result<CollectiveChatClosedResponse, Status>>>,
+    chat_closed_clients: Option<Sender<Result<ChatClosedResponse, Status>>>,
+    image_name: Option<String>
 }
 
 struct SearchingPeer {
@@ -52,8 +61,9 @@ struct SearchingPeer {
     lng: f64,
     status: String,
     status_color_id: i32,
-    searching_in_radius_in_meters: i32,
+    visible_in_radius_in_meters: i32,
     user_name: String,
+    description: String,
     tx: Sender<Result<SearchingPeerResponse, Status>>
 }
 
@@ -78,7 +88,7 @@ struct HABChat {
     personal_chat_message_senders: HashMap<String, Sender<Result<NewMessageResponse, Status>>>,
     collective_chat_message_senders: HashMap<String, Sender<Result<NewCollectiveMessageResponse, Status>>>,
     typing_message_senders: HashMap<String, Sender<Result<TypingMessageResponse, Status>>>,
-    chat_closed_clients: HashMap<String, Sender<Result<ChatClosedResponse, Status>>>,
+    //chat_closed_clients: HashMap<String, Sender<Result<ChatClosedResponse, Status>>>,
     //collective_chat_closed_clients: HashMap<String, Sender<Result<CollectiveChatClosedResponse, Status>>>,
 } 
 
@@ -100,7 +110,9 @@ impl Chat for HABChat {
             stream_blocked_in_personal_chat: Option::None,
             stream_clear_collective_chat: Option::None,
             stream_clear_personal_chat: Option::None,
-            collective_chat_closed_clients: Option::None
+            collective_chat_closed_clients: Option::None,
+            chat_closed_clients: Option::None,
+            image_name: Option::None
         };
         self.connected_clients.insert(user_id_from_request, connected_client);
 
@@ -124,100 +136,154 @@ impl Chat for HABChat {
         let lng_from_request = request.get_ref().longitude;
         let status_from_request = request.get_ref().status.clone();
         let status_color_id_from_request = request.get_ref().status_color_id;
-        let searching_in_radius_in_meters = request.get_ref().searching_in_radius_in_meters;
+        let visible_in_radius_in_meters_from_request = request.get_ref().visible_in_radius_in_meters;
+        let description_from_request = request.get_ref().description.clone();
+        let is_searching = request.get_ref().is_searching;
+
+        println!("searching_peer: user_id={}",&user_id_from_request);
+        println!("lat_from_request={}",lat_from_request);
+        println!("lng_from_request={}",lng_from_request);
         
-        let new_searching_peer = SearchingPeer{
-            lat: lat_from_request,
-            lng: lng_from_request,
-            status: status_from_request.clone(),
-            status_color_id: status_color_id_from_request,
-            searching_in_radius_in_meters: searching_in_radius_in_meters,
-            user_name: user_name_from_request.clone(),
-            tx: tx.clone()
-        };
-        self.searching_peers.entry(user_id_from_request.clone()).or_insert(new_searching_peer);
+        if self.searching_peers.contains_key(&user_id_from_request) == true {
+            let searching_peer = self.searching_peers.get_mut(&user_id_from_request).unwrap();
+            searching_peer.lat = lat_from_request;
+            searching_peer.lng = lng_from_request;
+            searching_peer.status = status_from_request.clone();
+            searching_peer.status_color_id = status_color_id_from_request;
+            searching_peer.visible_in_radius_in_meters = visible_in_radius_in_meters_from_request;
+            searching_peer.user_name = user_name_from_request.clone();
+            searching_peer.description = description_from_request.clone()
+        } else {
+            let new_searching_peer = SearchingPeer{
+                lat: lat_from_request,
+                lng: lng_from_request,
+                status: status_from_request.clone(),
+                status_color_id: status_color_id_from_request,
+                visible_in_radius_in_meters: visible_in_radius_in_meters_from_request,
+                user_name: user_name_from_request.clone(),
+                description: description_from_request.clone(),
+                tx: tx.clone()
+            };
+            self.searching_peers.insert(user_id_from_request.clone(), new_searching_peer);
+        }
 
-
-        //сохранить stream к searching peer
         let mut is_found_peer = false;
-        let mut found_peer_id = "".to_string();
-        for (key, val) in &self.searching_peers {
-            if &user_id_from_request != key {
-                // todo: change radius distance to latitude longitude coords
-                let lat1 = lat_from_request;
-                let lon1 = lng_from_request;
-                let lat2 = (*val).lat;
-                let lon2 = (*val).lng;
-                let actual_radiuse_between_peers = 10;//todo: compute_distance(lat1, lon1, lat2, lon2) as i32;
-                if actual_radiuse_between_peers <= val.searching_in_radius_in_meters {
-                    
-                    /*let new_connected_peer_to_peer = ConnectedPeerToPeer{
-                        user_id1: user_id_from_request.clone(),
-                        user_id2: (*key).clone()
-                    };*/
-                    //self.connected_peers_to_peers.push(new_connected_peer_to_peer);
-                    //self.connected_peer_to_peers.entry(user_id_from_request.clone()).or_insert((*key).clone());
-                    if self.connected_peer_to_peers.contains_key(&user_id_from_request) == true {
-                        let peers = self.connected_peer_to_peers.get_mut(&user_id_from_request).unwrap();
-                        peers.insert((*key).clone());
+        if is_searching == true {
+            for (key, val) in &self.searching_peers {
+                if &user_id_from_request != key {
+                    let lat1 = lat_from_request;
+                    let lon1 = lng_from_request;
+                    let lat2 = (*val).lat;
+                    let lon2 = (*val).lng;
+                    let actual_distance_between_peers = compute_distance(lat1, lon1, lat2, lon2) as i32;
+                    println!("actual_distance_between_peers={}",actual_distance_between_peers);
+                    if actual_distance_between_peers <= (*val).visible_in_radius_in_meters
+                    {
+                        println!("if actual_distance_between_peers <= (*val).visible_in_radius_in_meters");
+                        if self.connected_peer_to_peers.contains_key(&user_id_from_request) == true {
+                            let peers = self.connected_peer_to_peers.get_mut(&user_id_from_request).unwrap();
+                            peers.insert((*key).clone());
+                        } else {
+                            let mut peers = HashSet::new();
+                            peers.insert((*key).clone());
+                            self.connected_peer_to_peers.insert(user_id_from_request.clone(), peers);
+                        }
+    
+                        let peer_id: String = (*key).clone();
+                        let peer_radius_distance_in_meters = (*val).visible_in_radius_in_meters;
+                        let peer_status = (*val).status.clone();
+                        let peer_status_color_id = (*val).status_color_id;
+                        let peer_user_name = (*val).user_name.clone();
+                        let peer_description = (*val).description.clone();
+                        let reply_to_peer1 = chatservice::SearchingPeerResponse {
+                            response_code: 1,
+                            user_id: peer_id,
+                            radius_distance_in_meters: peer_radius_distance_in_meters,
+                            status: peer_status,
+                            status_color_id: peer_status_color_id,
+                            user_name: peer_user_name,
+                            description: peer_description
+                        };
+    
+                        let mut tx_tmp = tx.clone();
+                        tokio::spawn(async move {
+                            // sending response to client
+                            tx_tmp.send(Ok(reply_to_peer1)).await;
+                            println!("searching_peer: sent response");
+                        });
+                        is_found_peer = true;
                     } else {
-                        let mut peers = HashSet::new();
-                        peers.insert((*key).clone());
-                        self.connected_peer_to_peers.insert(user_id_from_request.clone(), peers);
+                        let mut tx_tmp = tx.clone();
+                        tokio::spawn(async move {
+                            for _ in 0i32..1 {
+                                let reply = chatservice::SearchingPeerResponse {
+                                    response_code: 2,
+                                    user_id: "no_user_id".to_string(),
+                                    radius_distance_in_meters: -1,
+                                    status: "".to_string(),
+                                    status_color_id: -1,
+                                    user_name: "".to_string(),
+                                    description: "".to_string()
+                                };
+                                tx_tmp.send(Ok(reply)).await;
+                            }
+                        });
                     }
-                    if self.connected_peer_to_peers.contains_key(key) == true {
-                        let peers = self.connected_peer_to_peers.get_mut(key).unwrap();
-                        peers.insert(user_id_from_request.clone());
+                    if actual_distance_between_peers <= visible_in_radius_in_meters_from_request
+                    {
+                        println!("if actual_distance_between_peers <= visible_in_radius_in_meters");
+                        
+                        if self.connected_peer_to_peers.contains_key(key) == true {
+                            let peers = self.connected_peer_to_peers.get_mut(key).unwrap();
+                            peers.insert(user_id_from_request.clone());
+                        } else {
+                            let mut peers = HashSet::new();
+                            peers.insert(user_id_from_request.clone());
+                            self.connected_peer_to_peers.insert((*key).clone(), peers);
+                        }
+                        let peer2_id: String = user_id_from_request.clone();
+                        let peer2_radius_distance_in_meters = visible_in_radius_in_meters_from_request;
+                        let peer2_status = status_from_request.clone();
+                        let peer2_status_color_id = status_color_id_from_request;
+                        let peer2_user_name = user_name_from_request.clone();
+                        let peer2_description = description_from_request.clone();
+                        let reply_to_peer2 = chatservice::SearchingPeerResponse {
+                            response_code: 1,
+                            user_id: peer2_id,
+                            radius_distance_in_meters: peer2_radius_distance_in_meters,
+                            status: peer2_status,
+                            status_color_id: peer2_status_color_id,
+                            user_name: peer2_user_name,
+                            description: peer2_description
+                        };
+    
+                        let mut tx_tmp = (*val).tx.clone();
+                        tokio::spawn(async move {
+                            // sending response to client
+                            tx_tmp.send(Ok(reply_to_peer2)).await;
+                            println!("searching_peer: sent response");
+                        });
                     } else {
-                        let mut peers = HashSet::new();
-                        peers.insert(user_id_from_request.clone());
-                        self.connected_peer_to_peers.insert((*key).clone(), peers);
+                        let mut tx_tmp = (*val).tx.clone();
+                        tokio::spawn(async move {
+                            for _ in 0i32..1 {
+                                let reply = chatservice::SearchingPeerResponse {
+                                    response_code: 2,
+                                    user_id: "no_user_id".to_string(),
+                                    radius_distance_in_meters: -1,
+                                    status: "".to_string(),
+                                    status_color_id: -1,
+                                    user_name: "".to_string(),
+                                    description: "".to_string()
+                                };
+                                tx_tmp.send(Ok(reply)).await;
+                            }
+                        });
                     }
-
-                    is_found_peer = true;
-                    found_peer_id = (*key).clone();
-
-                    let peer_id: String = (*key).clone();
-                    let peer_radius_distance_in_meters = searching_in_radius_in_meters;
-                    let peer_status = (*val).status.clone();
-                    let peer_status_color_id = (*val).status_color_id;
-                    let peer_user_name = (*val).user_name.clone();
-                    let reply_to_peer1 = chatservice::SearchingPeerResponse {
-                        response_code: 1,
-                        user_id: peer_id,
-                        radius_distance_in_meters: peer_radius_distance_in_meters,
-                        status: peer_status,
-                        status_color_id: peer_status_color_id,
-                        user_name: peer_user_name
-                    };
-
-                    let mut tx_tmp = tx.clone();
-                    tokio::spawn(async move {
-                        // sending response to client
-                        tx_tmp.send(Ok(reply_to_peer1)).await;
-                    });
-
-                    let peer2_id: String = user_id_from_request.clone();
-                    let peer2_radius_distance_in_meters = searching_in_radius_in_meters;
-                    let peer2_status = status_from_request.clone();
-                    let peer2_status_color_id = status_color_id_from_request;
-                    let peer2_user_name = user_name_from_request.clone();
-                    let reply_to_peer2 = chatservice::SearchingPeerResponse {
-                        response_code: 1,
-                        user_id: peer2_id,
-                        radius_distance_in_meters: peer2_radius_distance_in_meters,
-                        status: peer2_status,
-                        status_color_id: peer2_status_color_id,
-                        user_name: peer2_user_name
-                    };
-
-                    tx_tmp = (*val).tx.clone();
-                    tokio::spawn(async move {
-                        // sending response to client
-                        tx_tmp.send(Ok(reply_to_peer2)).await;
-                    });
                 }
             }
+        } else {
+
         }
 
         if is_found_peer == true {
@@ -228,6 +294,7 @@ impl Chat for HABChat {
                 key != &user_id_from_request && radius_distance_in_meters_from_request == (*val).radius_distance_in_meters
             });*/
         } else {
+            println!("is_found_peer == false");
             tokio::spawn(async move {
                 for _ in 0i32..1 {
                     let reply = chatservice::SearchingPeerResponse {
@@ -236,13 +303,14 @@ impl Chat for HABChat {
                         radius_distance_in_meters: -1,
                         status: "".to_string(),
                         status_color_id: -1,
-                        user_name: "".to_string()
+                        user_name: "".to_string(),
+                        description: "".to_string()
                     };
                     tx.send(Ok(reply)).await;
                 }
             });
         }
-        // returning our reciever so that tonic can listen on reciever and send the response to client
+        
         return Ok(Response::new(rx));
     }
 
@@ -610,20 +678,29 @@ impl Chat for HABChat {
 
         // это нужно для того, чтобы сохранить stream, чтобы потом в этот stream отправить
         // инфу, что собеседник закрыл чат
-        self.chat_closed_clients.entry(user_id_from_request.clone()).or_insert(tx.clone());
+        //self.chat_closed_clients.entry(user_id_from_request.clone()).or_insert(tx.clone());
+        if let Some(connected_client) = self.connected_clients.get_mut(&user_id_from_request) {
+            if connected_client.chat_closed_clients.is_none() {
+                connected_client.chat_closed_clients = Some(tx.clone());
+            }
+        }
 
         if is_closed == true {
             if &user_id2_from_request != "" {
                 if let Some(another_peer) = self.connected_peer_to_peer.get(&user_id2_from_request) {
                     if another_peer == &user_id_from_request {
-                        if self.chat_closed_clients.contains_key(&user_id2_from_request) == true {
-                            let tx_tmp_ref = self.chat_closed_clients.get(&user_id2_from_request).unwrap();
-                            let mut tx_tmp = (*tx_tmp_ref).clone();
-                            let reply = ChatClosedResponse{};
-                            tokio::spawn(async move {
-                                tx_tmp.send(Ok(reply)).await;
-                                println!("sent a chat_closed ");
-                            });
+                        //if self.chat_closed_clients.contains_key(&user_id2_from_request) == true {
+                        if self.connected_clients.contains_key(&user_id2_from_request) == true {
+                            //let tx_tmp_ref = self.chat_closed_clients.get(&user_id2_from_request).unwrap();
+                            //let mut tx_tmp = (*tx_tmp_ref).clone();
+                            let connected_client = self.connected_clients.get(&user_id2_from_request).unwrap();
+                            if let Some(mut tx_tmp) = connected_client.chat_closed_clients.clone() {
+                                let reply = ChatClosedResponse{};
+                                tokio::spawn(async move {
+                                    tx_tmp.send(Ok(reply)).await;
+                                    println!("sent a chat_closed ");
+                                });
+                            }
                         }
                     }
                 }
@@ -631,7 +708,11 @@ impl Chat for HABChat {
                 //self.personal_chat_message_senders.remove(&user_id2_from_request);
                 self.typing_message_senders.remove(&user_id_from_request);
                 //self.typing_message_senders.remove(&user_id2_from_request);
-                self.chat_closed_clients.remove(&user_id_from_request);
+                //self.chat_closed_clients.remove(&user_id_from_request);
+                if let Some(connected_client) = self.connected_clients.get_mut(&user_id_from_request) {
+                    connected_client.chat_closed_clients = None;
+                }
+
                 //self.chat_closed_clients.remove(&user_id2_from_request);
                 self.connected_peer_to_peer.remove(&user_id_from_request);
                 self.connected_peer_to_peer.remove(&user_id2_from_request);
@@ -729,11 +810,12 @@ impl Chat for HABChat {
         self.typing_message_senders.remove(&user_id_from_request);
 
         // удалить подключённого клиента
-        self.chat_closed_clients.remove(&user_id_from_request);
+        //self.chat_closed_clients.remove(&user_id_from_request);
         //self.collective_chat_closed_clients.remove(&user_id_from_request);
         if user_id_from_request != "" {
             if let Some(mut connected_client) = self.connected_clients.get_mut(&user_id_from_request) {
                 connected_client.collective_chat_closed_clients = Option::None;
+                connected_client.chat_closed_clients = Option::None;
             }
         }
         
@@ -942,6 +1024,135 @@ impl Chat for HABChat {
         
         // todo: where send report?
         return Ok(Response::new(ReportUserResponse{}));
+    }
+    async fn upload_image(
+        &mut self,
+        request: Request<tonic::Streaming<UploadImageRequest>>,
+    ) -> Result<Response<UploadImageResponse>, tonic::Status>
+    {
+        println!("upload_image request");
+        let mut stream = request.into_inner();
+
+        if let Some(uploadImageRequestResult) = stream.next().await {
+            if let Ok(uploadImageRequest) = uploadImageRequestResult {
+                let user_id_from_request = uploadImageRequest.user_id;
+                println!("upload_image: user_id_from_request={}",&user_id_from_request);
+                let file_name_from_request = uploadImageRequest.image_name;
+                println!("upload_image: file_name_from_request={}",&file_name_from_request);
+                // check if file with same file_name not exist
+                if let Err(_) = File::open(&file_name_from_request) {
+                    let file = File::create(&file_name_from_request)?;
+                    let mut buf_writer = BufWriter::new(file);
+                    if let Some(connected_client) = self.connected_clients.get_mut(&user_id_from_request) {
+                        connected_client.image_name = Some(file_name_from_request);
+                    }
+                    let file_chunk = uploadImageRequest.file_chunk;
+                    let res = buf_writer.write_all(file_chunk.as_slice());
+            
+                    while let Some(uploadImageRequestResult) = stream.next().await {
+                        if let Ok(uploadImageRequest) = uploadImageRequestResult {
+                            let file_chunk = uploadImageRequest.file_chunk;
+                            let res = buf_writer.write_all(file_chunk.as_slice());
+                        }
+                    }
+                    buf_writer.flush().unwrap();
+                    println!("upload_image: upload success");
+                } else {
+                    println!("upload_image: no error, open file");
+                }
+            }
+        }
+
+        let reply = UploadImageResponse{
+        };
+        return Ok(Response::new(reply));
+    }
+
+    type DownloadImageStream= mpsc::Receiver<Result<DownloadImageResponse, tonic::Status>>;
+    async fn download_image(
+        &self,
+        request: tonic::Request<DownloadImageRequest>,
+    ) -> Result<tonic::Response<Self::DownloadImageStream>, tonic::Status> {
+        let (tx, rx) = mpsc::channel(4);
+
+        let user_id_from_request = request.get_ref().user_id.clone();
+
+        if let Some(connected_client) = self.connected_clients.get(&user_id_from_request) {
+            if let Some(image_name) = &connected_client.image_name {
+                if let Ok(file) = File::open(image_name) {
+                    let mut buf_reader = BufReader::new(file);
+                    let mut buf: Vec<u8> = vec![0;1024];
+
+                    if let Ok(mut res) = buf_reader.read(buf.as_mut()) {
+                        while res > 0 {
+                            let reply = DownloadImageResponse {
+                                response_code: 1,
+                                file_chunk: buf.clone()
+                            };
+                            let mut tx_tmp = tx.clone();
+                            tokio::spawn(async move {
+                                let res = tx_tmp.send(Ok(reply)).await;
+                                match res {
+                                    Ok(_) =>println!("download_image: sent a download_image"),
+                                    Err(e) =>println!(" download_image ERROR: {}", e)
+                                }
+                            });
+                            if let Ok(n) = buf_reader.read(buf.as_mut()) {
+                                res = n;
+                            } else {
+                                let reply = DownloadImageResponse {
+                                    response_code: -1,
+                                    file_chunk: vec![]
+                                };
+                                let mut tx_tmp = tx.clone();
+                                tokio::spawn(async move {
+                                    let res = tx_tmp.send(Ok(reply)).await;
+                                    match res {
+                                        Ok(_) =>println!("download_image: sent a download_image"),
+                                        Err(e) =>println!(" download_image ERROR: {}", e)
+                                    }
+                                });
+                            }
+                        }
+                        if res == 0 {
+                            let reply = DownloadImageResponse {
+                                response_code: 2,
+                                file_chunk: buf.clone()
+                            };
+                            let mut tx_tmp = tx.clone();
+                            tokio::spawn(async move {
+                                let res = tx_tmp.send(Ok(reply)).await;
+                                match res {
+                                    Ok(_) =>println!("download_image: sent a download_image"),
+                                    Err(e) =>println!(" download_image ERROR: {}", e)
+                                }
+                            });
+                        }
+                    } else {
+                        let reply = DownloadImageResponse {
+                            response_code: -1,
+                            file_chunk: vec![]
+                        };
+                        let mut tx_tmp = tx.clone();
+                        tokio::spawn(async move {
+                            let res = tx_tmp.send(Ok(reply)).await;
+                            match res {
+                                Ok(_) =>println!("download_image: sent a download_image"),
+                                Err(e) =>println!(" download_image ERROR: {}", e)
+                            }
+                        });
+                    }
+                } else {
+                    println!("download_image: error while opening file");
+                }
+            } else {
+                println!("download_image: no image_name");
+            }
+        } else {
+            println!("download_image: no connected_client");
+        }
+
+        return Ok(Response::new(rx));
     }
 }
 
