@@ -28,6 +28,16 @@ pub struct SearchingPeerRequest {
     pub description: std::string::String,
     #[prost(bool, tag = "9")]
     pub is_searching: bool,
+    #[prost(string, tag = "10")]
+    pub gender: std::string::String,
+    #[prost(int32, tag = "11")]
+    pub age: i32,
+    #[prost(string, tag = "12")]
+    pub searching_gender: std::string::String,
+    #[prost(int32, tag = "13")]
+    pub searching_min_age: i32,
+    #[prost(int32, tag = "14")]
+    pub searching_max_age: i32,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SearchingPeerResponse {
@@ -45,7 +55,20 @@ pub struct SearchingPeerResponse {
     pub user_name: std::string::String,
     #[prost(string, tag = "7")]
     pub description: std::string::String,
+    #[prost(bool, tag = "8")]
+    pub is_admin_on: bool,
 }
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NewCoordinatesRequest {
+    #[prost(string, tag = "1")]
+    pub user_id: std::string::String,
+    #[prost(double, tag = "2")]
+    pub latitude: f64,
+    #[prost(double, tag = "3")]
+    pub longitude: f64,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NewCoordinatesResponse {}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NewMessageRequest {
     #[prost(string, tag = "1")]
@@ -349,6 +372,10 @@ pub mod chat_server {
             &mut self,
             request: tonic::Request<super::SearchingPeerRequest>,
         ) -> Result<tonic::Response<Self::SearchingPeerStream>, tonic::Status>;
+        async fn new_coordinates(
+            &mut self,
+            request: tonic::Request<super::NewCoordinatesRequest>,
+        ) -> Result<tonic::Response<super::NewCoordinatesResponse>, tonic::Status>;
         #[doc = "Server streaming response type for the NewMessage method."]
         type NewMessageStream: Stream<Item = Result<super::NewMessageResponse, tonic::Status>>
             + Send
@@ -555,6 +582,40 @@ pub mod chat_server {
                             tonic::server::Grpc::new(codec)
                         };
                         let res = grpc.server_streaming(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/chatservice.Chat/NewCoordinates" => {
+                    #[allow(non_camel_case_types)]
+                    struct NewCoordinatesSvc<T: Chat>(pub Arc<Mutex<T>>);
+                    impl<T: Chat> tonic::server::UnaryService<super::NewCoordinatesRequest> for NewCoordinatesSvc<T> {
+                        type Response = super::NewCoordinatesResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::NewCoordinatesRequest>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move { 
+                                let mut tmp_inner = inner.lock().await;
+                                tmp_inner.new_coordinates(request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let interceptor = inner.1.clone();
+                        let inner = inner.0;
+                        let method = NewCoordinatesSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = if let Some(interceptor) = interceptor {
+                            tonic::server::Grpc::with_interceptor(codec, interceptor)
+                        } else {
+                            tonic::server::Grpc::new(codec)
+                        };
+                        let res = grpc.unary(method, req).await;
                         Ok(res)
                     };
                     Box::pin(fut)

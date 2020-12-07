@@ -24,6 +24,11 @@ message SearchingPeerRequest {
     int32 status_color_id = 7;
     string description = 8;
     bool is_searching = 9;
+    string gender = 10;
+    int32 age = 11;
+    string searching_gender = 12;
+    int32 searching_min_age = 13;
+    int32 searching_max_age = 14;
 }
 
 message SearchingPeerResponse {
@@ -34,6 +39,16 @@ message SearchingPeerResponse {
     int32 status_color_id = 5;
     string user_name = 6;
     string description = 7;
+    bool is_admin_on = 8;
+}
+
+message NewCoordinatesRequest {
+    string user_id = 1;
+    double latitude = 2;
+    double longitude = 3;
+}
+
+message NewCoordinatesResponse {
 }
 
 message NewMessageRequest {
@@ -165,7 +180,7 @@ message UploadImageRequest {
 }
 
 message UploadImageResponse {
-    
+
 }
 
 message DownloadImageRequest {
@@ -180,7 +195,8 @@ message DownloadImageResponse {
 service Chat {
     rpc NewPeer (NewPeerRequest) returns (NewPeerResponse) {}
     rpc SearchingPeer(SearchingPeerRequest) returns (stream SearchingPeerResponse) {}
-    rpc NewMessage (NewMessageRequest) returns (stream NewMessageResponse) {}
+    rpc NewCoordinates(NewCoordinatesRequest) returns(NewCoordinatesResponse) {}
+    rpc NewMessage(NewMessageRequest) returns (stream NewMessageResponse) {}
     rpc NewCollectiveMessage(NewCollectiveMessageRequest) returns (stream NewCollectiveMessageResponse) {}
     rpc TypingMessage(TypingMessageRequest) returns (stream TypingMessageResponse) {}
     rpc ChatClosed(ChatClosedRequest) returns(stream ChatClosedResponse){}
