@@ -20,6 +20,10 @@ use std::io::Write;
 use std::io::Read;
 use std::io::BufWriter;
 use std::io::BufReader;
+use std::pin::Pin;
+use std::task::Poll;
+use std::task::Context;
+use std::ops::Deref;
 /*pub mod chatservice {
     tonic::include_proto!("chatservice");
 }*/
@@ -40,7 +44,7 @@ use chatservice::{NewPeerRequest, NewPeerResponse, SearchingPeerRequest, Searchi
     BlockUserInPersonalChatRequest, BlockUserInPersonalChatResponse,
     ClearPersonalChatRequest, ClearPersonalChatResponse,
     ReportUserRequest, ReportUserResponse,UploadImageRequest,UploadImageResponse,
-    DownloadImageRequest, DownloadImageResponse
+    DownloadImageRequest, DownloadImageResponse, RemoveImageRequest, RemoveImageResponse
 };
 
 mod pushnotificationsservice;
@@ -51,6 +55,7 @@ struct ConnectedClient {
     is_admin_on: bool,
     //blocked_by_admin_ids_in_collective_chat: HashMap<String, UserBlockTime>,
     //blocked_in_personal_chats: HashMap<String, UserBlockTime>,
+    sender_new_peer: Option<Sender<Result<NewPeerResponse, Status>>>,
     sender_blocked_in_collective_chat: Option<Sender<Result<BlockUserInCollectiveChatResponse, Status>>>,
     sender_blocked_in_personal_chat: Option<Sender<Result<BlockUserInPersonalChatResponse, Status>>>,
     sender_clear_collective_chat: Option<Sender<Result<ClearCollectiveChatResponse, Status>>>,
@@ -97,44 +102,146 @@ enum UserBlockTime {
 struct HABChat {
     connected_clients: RwLock<HashMap<String, ConnectedClient>>,
     searching_peers: RwLock<HashMap<String, SearchingPeer>>,
-    connected_peer_to_peer: HashMap<String, String>,//todo: wrap HashMap into RwLock
-    connected_peer_to_peers: HashMap<String, HashSet<String>>,
+    connected_peer_to_peer: RwLock<HashMap<String, String>>,
+    connected_peer_to_peers: RwLock<HashMap<String, HashSet<String>>>,
     //chat_closed_clients: HashMap<String, Sender<Result<ChatClosedResponse, Status>>>,
     //collective_chat_closed_clients: HashMap<String, Sender<Result<CollectiveChatClosedResponse, Status>>>,
-} 
+}
+
+pub struct DropReceiver<T> {
+    rx: Receiver<T>,
+    user_id: String,
+    hab_chat: &'static mut HABChat
+}
+//unsafe impl<T: Send> Send for DropReceiver<T> {}
+impl<T> tokio::stream::Stream for DropReceiver<T> {
+    type Item = T;
+    
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        Pin::new(&mut self.rx).poll_next(cx)
+    }
+}
+impl<T> Deref for DropReceiver<T> {
+    type Target = Receiver<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.rx
+    }
+}
+impl<T> Drop for DropReceiver<T> {
+    fn drop(&mut self) {
+        println!("RECEIVER has been DROPPED");
+        //self.hab_chat.lock().unwrap().connected_clients.remove(&self.user_id);
+        let hab_chat = &mut self.hab_chat;
+        {
+            use futures::executor;
+            let user_id = self.user_id.clone();
+            let lock = &mut hab_chat.connected_clients;
+            executor::block_on(async{
+                let connected_clients = &mut(*(lock.write().await));
+                connected_clients.remove(&user_id);
+            });
+            
+            executor::block_on(async {
+                let searching_peers = &mut (*(hab_chat.searching_peers.write().await));
+                searching_peers.remove(&user_id);
+            });
+            executor::block_on(async {
+                let connected_peer_to_peer = &mut(*(hab_chat.connected_peer_to_peer.write().await));
+                connected_peer_to_peer.retain(|key, val| {
+                    key != &user_id || val != &user_id
+                });
+            });
+    
+            // удалить из connected_peers_to_peers по user_id, если есть
+            executor::block_on(async {
+                let connected_peer_to_peers = &mut(*(hab_chat.connected_peer_to_peers.write().await));
+                connected_peer_to_peers.remove(&user_id);
+                for (_, val) in connected_peer_to_peers {
+                    val.remove(&user_id);
+                };
+            });
+            executor::block_on(async {
+                let searching_peers = &(*(hab_chat.searching_peers.read().await));
+                for (key, val) in searching_peers {
+                    if key != &user_id {
+                        let reply_to_peer = chatservice::SearchingPeerResponse {
+                            response_code: 3,
+                            user_id: user_id.clone(),
+                            radius_distance_in_meters: 0,
+                            status: "".to_string(),
+                            status_color_id: 0,
+                            user_name: "".to_string(),
+                            description: "".to_string(),
+                            is_admin_on: false
+                        };
+                        let mut tx_tmp = val.tx.clone();
+                        //tokio::spawn(async move {
+                            // sending response to client
+                            tx_tmp.send(Ok(reply_to_peer)).await;
+                            println!("new peer: sent response peer closed");
+                        //});
+                    }
+                }
+            });
+        }
+        
+    }
+}
+
+fn extend_lifetime<'short_lifetime>(r: &'short_lifetime mut HABChat) -> &'static mut HABChat {
+    return unsafe {
+        std::mem::transmute::<&'short_lifetime mut HABChat, &'static mut HABChat>(r)
+    };
+}
 
 #[tonic::async_trait]
 impl Chat for HABChat {
-
-    async fn new_peer(&mut self, request: Request<NewPeerRequest>)-> Result<Response<NewPeerResponse>, Status>
+    type NewPeerStream = DropReceiver<Result<NewPeerResponse, Status>>;
+    async fn new_peer(&mut self, request: Request<NewPeerRequest>)-> Result<Response<Self::NewPeerStream>, Status>
     {
         println!("Got a new peer request from {:?}", request.remote_addr());
-
+        let (mut tx, rx) = mpsc::channel(4);
         let user_id_from_request = request.get_ref().user_id.clone();
         println!("Got user_id_from_request: {}", &user_id_from_request);
+        
+        {
+            let connected_client = ConnectedClient{
+                is_admin_on: false,
+                //blocked_by_admin_ids_in_collective_chat: HashMap::new(),
+                //blocked_in_personal_chats: HashMap::new(),
+                sender_new_peer: Some(tx.clone()),
+                sender_blocked_in_collective_chat: Option::None,
+                sender_blocked_in_personal_chat: Option::None,
+                sender_clear_collective_chat: Option::None,
+                sender_clear_personal_chat: Option::None,
+                sender_collective_chat_closed_clients: Option::None,
+                sender_chat_closed_clients: Option::None,
+                sender_typing_message: Option::None,
+                sender_personal_chat_message: Option::None,
+                sender_collective_chat_message: Option::None,
+                image_name: Option::None
+            };
+            let connected_clients = &mut (*(self.connected_clients.write().await));
+            connected_clients.insert(user_id_from_request, connected_client);
+        }
 
-        let connected_client = ConnectedClient{
-            is_admin_on: false,
-            //blocked_by_admin_ids_in_collective_chat: HashMap::new(),
-            //blocked_in_personal_chats: HashMap::new(),
-            sender_blocked_in_collective_chat: Option::None,
-            sender_blocked_in_personal_chat: Option::None,
-            sender_clear_collective_chat: Option::None,
-            sender_clear_personal_chat: Option::None,
-            sender_collective_chat_closed_clients: Option::None,
-            sender_chat_closed_clients: Option::None,
-            sender_typing_message: Option::None,
-            sender_personal_chat_message: Option::None,
-            sender_collective_chat_message: Option::None,
-            image_name: Option::None
+        tokio::spawn(async move {
+            // sending response to client
+            let reply = chatservice::NewPeerResponse {
+                response_code: 1
+            };
+            let res = tx.send(Ok(reply)).await;
+            if let Ok(res_ok) = res {
+                println!("new_peer: sent response");
+            }
+        });
+        let receiver = DropReceiver{
+            rx: rx,
+            user_id: request.get_ref().user_id.clone(),
+            hab_chat: extend_lifetime(self)
         };
-        let connected_clients = &mut (*(self.connected_clients.write().await));
-        connected_clients.insert(user_id_from_request, connected_client);
-
-        let reply = chatservice::NewPeerResponse {
-            response_code: 1
-        };
-        return Ok(Response::new(reply));
+        return Ok(Response::new(receiver));
     }
 
     type SearchingPeerStream=mpsc::Receiver<Result<SearchingPeerResponse,Status>>;
@@ -221,13 +328,14 @@ impl Chat for HABChat {
                             if val.age >= searching_min_age_from_request && val.age <= searching_max_age_from_request {
                                 if val.searching_gender == gender_from_request || val.searching_gender == "gender_all" {
                                     if age_from_request >= val.searching_min_age && age_from_request <= val.searching_max_age {
-                                        if self.connected_peer_to_peers.contains_key(&user_id_from_request) == true {
-                                            let peers = self.connected_peer_to_peers.get_mut(&user_id_from_request).unwrap();
+                                        let connected_peer_to_peers = &mut(*(self.connected_peer_to_peers.write().await));
+                                        if connected_peer_to_peers.contains_key(&user_id_from_request) == true {
+                                            let peers = connected_peer_to_peers.get_mut(&user_id_from_request).unwrap();
                                             peers.insert((*key).clone());
                                         } else {
                                             let mut peers = HashSet::new();
                                             peers.insert((*key).clone());
-                                            self.connected_peer_to_peers.insert(user_id_from_request.clone(), peers);
+                                            connected_peer_to_peers.insert(user_id_from_request.clone(), peers);
                                         }
                     
                                         let peer_id: String = (*key).clone();
@@ -237,6 +345,7 @@ impl Chat for HABChat {
                                         let peer_user_name = (*val).user_name.clone();
                                         let peer_description = (*val).description.clone();
                                         let connected_clients = &(*(self.connected_clients.read().await));
+                                        //fixme: thread 'tokio-runtime-worker' panicked at 'called `Option::unwrap()` on a `None` value', src/main.rs:341:91
                                         let is_admin_on = connected_clients.get(&peer_id).unwrap().is_admin_on;
                                         let reply_to_peer1 = chatservice::SearchingPeerResponse {
                                             response_code: 1,
@@ -279,14 +388,14 @@ impl Chat for HABChat {
                                     if actual_distance_between_peers <= visible_in_radius_in_meters_from_request
                                     {
                                         println!("if actual_distance_between_peers <= visible_in_radius_in_meters");
-                                        
-                                        if self.connected_peer_to_peers.contains_key(key) == true {
-                                            let peers = self.connected_peer_to_peers.get_mut(key).unwrap();
+                                        let connected_peer_to_peers = &mut(*(self.connected_peer_to_peers.write().await));
+                                        if connected_peer_to_peers.contains_key(key) == true {
+                                            let peers = connected_peer_to_peers.get_mut(key).unwrap();
                                             peers.insert(user_id_from_request.clone());
                                         } else {
                                             let mut peers = HashSet::new();
                                             peers.insert(user_id_from_request.clone());
-                                            self.connected_peer_to_peers.insert((*key).clone(), peers);
+                                            connected_peer_to_peers.insert((*key).clone(), peers);
                                         }
                                         let peer2_id: String = user_id_from_request.clone();
                                         let peer2_radius_distance_in_meters = visible_in_radius_in_meters_from_request;
@@ -453,7 +562,10 @@ impl Chat for HABChat {
         let user_id2_from_request = request.get_ref().to_user_id.clone();
         println!("Got user_id_from_request: {}", &user_id_from_request);
         println!("Got user_id2_from_request: {}", &user_id2_from_request);
-        self.connected_peer_to_peer.entry(user_id_from_request.clone()).or_insert(user_id2_from_request.clone());
+        {
+            let connected_peer_to_peer = &mut(*(self.connected_peer_to_peer.write().await));
+            connected_peer_to_peer.entry(user_id_from_request.clone()).or_insert(user_id2_from_request.clone());
+        }
 
         if message_from_request == "" {
             //self.personal_chat_message_senders.entry(user_id_from_request.clone()).or_insert(tx.clone());
@@ -471,9 +583,10 @@ impl Chat for HABChat {
                 //if self.personal_chat_message_senders.contains_key(&user_id2_from_request) == true {
                 if let Some(connected_client) = connected_clients.get_mut(&user_id2_from_request) {
                     println!("if let Some(connected_client) = self.connected_clients.get_mut(&user_id2_from_request)");
-                    if self.connected_peer_to_peer.contains_key(&user_id2_from_request) == true {
+                    let connected_peer_to_peer = &(*(self.connected_peer_to_peer.read().await));
+                    if connected_peer_to_peer.contains_key(&user_id2_from_request) == true {
                         println!("if self.connected_peer_to_peer.contains_key(&user_id2_from_request) == true");
-                        let another_peer = self.connected_peer_to_peer.get(&user_id2_from_request).unwrap();
+                        let another_peer = connected_peer_to_peer.get(&user_id2_from_request).unwrap();
                         if another_peer == &user_id_from_request {
                             println!("if another_peer == &user_id_from_request ");
                             if let Some(tx_tmp_ref) = &connected_client.sender_personal_chat_message {
@@ -634,7 +747,8 @@ impl Chat for HABChat {
                     if connected_clients.contains_key(&admin_id_from_request) == true {
                         let connected_client = connected_clients.get(&admin_id_from_request).unwrap();
                         if connected_client.is_admin_on == true {
-                            let peers = self.connected_peer_to_peers.get(&admin_id_from_request).unwrap();
+                            let connected_peer_to_peers = &(*(self.connected_peer_to_peers.read().await));
+                            let peers = connected_peer_to_peers.get(&admin_id_from_request).unwrap();
                             for peer in peers {
                                 
                                 if let Some(connected_peer) = connected_clients.get(peer) {
@@ -675,7 +789,8 @@ impl Chat for HABChat {
                     }
                 }
             } else {
-                let peers = self.connected_peer_to_peers.get(&admin_id_from_request).unwrap();
+                let connected_peer_to_peers = &(*(self.connected_peer_to_peers.read().await));
+                let peers = connected_peer_to_peers.get(&admin_id_from_request).unwrap();
                 println!("self.connected_peer_to_peers.get(&admin_id_from_request).unwrap()");
                 let connected_clients = &(*(self.connected_clients.read().await));
                 for peer in peers {
@@ -742,8 +857,9 @@ impl Chat for HABChat {
         }
 
         if &user_id2_from_request != "" {
-            if self.connected_peer_to_peer.contains_key(&user_id2_from_request) {
-                if let Some(another_peer) = self.connected_peer_to_peer.get(&user_id2_from_request) {
+            let connected_peer_to_peer = &(*(self.connected_peer_to_peer.read().await));
+            if connected_peer_to_peer.contains_key(&user_id2_from_request) {
+                if let Some(another_peer) = connected_peer_to_peer.get(&user_id2_from_request) {
                     if another_peer == &user_id_from_request {
                         //if self.typing_message_senders.contains_key(&user_id2_from_request) == true {
                         let connected_clients = &(*(self.connected_clients.read().await));
@@ -766,7 +882,8 @@ impl Chat for HABChat {
             //if self.typing_message_senders.len() > 1 {
                 // send "typing message" to many users in the same radius
                 //let peers = self.connected_peer_to_peers.get(&user_id_from_request).unwrap();
-                if let Some(peers) = self.connected_peer_to_peers.get(&user_id_from_request) {
+                let connected_peer_to_peers = &(*(self.connected_peer_to_peers.read().await));
+                if let Some(peers) = connected_peer_to_peers.get(&user_id_from_request) {
                     for peer in peers {
                         //if self.typing_message_senders.contains_key(peer) == true {
                         let connected_clients = &(*(self.connected_clients.read().await));
@@ -815,20 +932,23 @@ impl Chat for HABChat {
 
         if is_closed == true {
             if &user_id2_from_request != "" {
-                if let Some(another_peer) = self.connected_peer_to_peer.get(&user_id2_from_request) {
-                    if another_peer == &user_id_from_request {
-                        //if self.chat_closed_clients.contains_key(&user_id2_from_request) == true {
-                        let connected_clients = &(*(self.connected_clients.read().await));
-                        if connected_clients.contains_key(&user_id2_from_request) == true {
-                            //let tx_tmp_ref = self.chat_closed_clients.get(&user_id2_from_request).unwrap();
-                            //let mut tx_tmp = (*tx_tmp_ref).clone();
-                            let connected_client = connected_clients.get(&user_id2_from_request).unwrap();
-                            if let Some(mut tx_tmp) = connected_client.sender_chat_closed_clients.clone() {
-                                let reply = ChatClosedResponse{};
-                                tokio::spawn(async move {
-                                    tx_tmp.send(Ok(reply)).await;
-                                    println!("sent a chat_closed ");
-                                });
+                {
+                    let connected_peer_to_peer = &(*(self.connected_peer_to_peer.read().await));
+                    if let Some(another_peer) = connected_peer_to_peer.get(&user_id2_from_request) {
+                        if another_peer == &user_id_from_request {
+                            //if self.chat_closed_clients.contains_key(&user_id2_from_request) == true {
+                            let connected_clients = &(*(self.connected_clients.read().await));
+                            if connected_clients.contains_key(&user_id2_from_request) == true {
+                                //let tx_tmp_ref = self.chat_closed_clients.get(&user_id2_from_request).unwrap();
+                                //let mut tx_tmp = (*tx_tmp_ref).clone();
+                                let connected_client = connected_clients.get(&user_id2_from_request).unwrap();
+                                if let Some(mut tx_tmp) = connected_client.sender_chat_closed_clients.clone() {
+                                    let reply = ChatClosedResponse{};
+                                    tokio::spawn(async move {
+                                        tx_tmp.send(Ok(reply)).await;
+                                        println!("sent a chat_closed ");
+                                    });
+                                }
                             }
                         }
                     }
@@ -847,8 +967,11 @@ impl Chat for HABChat {
                 }
 
                 //self.chat_closed_clients.remove(&user_id2_from_request);
-                self.connected_peer_to_peer.remove(&user_id_from_request);
-                self.connected_peer_to_peer.remove(&user_id2_from_request);
+                {
+                    let connected_peer_to_peer = &mut(*(self.connected_peer_to_peer.write().await));
+                    connected_peer_to_peer.remove(&user_id_from_request);
+                    connected_peer_to_peer.remove(&user_id2_from_request);
+                }
             }
             /*self.connected_peer_to_peers.remove(&user_id_from_request);
             for (_, val) in &mut self.connected_peer_to_peers {
@@ -881,8 +1004,9 @@ impl Chat for HABChat {
         
 
         if is_closed == true {
-            let peers = self.connected_peer_to_peers.get(&user_id_from_request).unwrap();
-            {
+            let connected_peer_to_peers = &(*(self.connected_peer_to_peers.read().await));
+            let peers_opt = connected_peer_to_peers.get(&user_id_from_request);
+            if let Some(peers) = peers_opt{
                 let connected_clients = &(*(self.connected_clients.read().await));
                 for user_id2 in peers {
                     //if self.collective_chat_closed_clients.contains_key(user_id2) == true {
@@ -939,16 +1063,21 @@ impl Chat for HABChat {
             let searching_peers = &mut (*(self.searching_peers.write().await));
             searching_peers.remove(&user_id_from_request);
         }
-        
-        self.connected_peer_to_peer.retain(|key, val| {
-            key != &user_id_from_request || val != &user_id_from_request
-        });
+        {
+            let connected_peer_to_peer = &mut(*(self.connected_peer_to_peer.write().await));
+            connected_peer_to_peer.retain(|key, val| {
+                key != &user_id_from_request || val != &user_id_from_request
+            });
+        }
 
         // удалить из connected_peers_to_peers по user_id, если есть
-        self.connected_peer_to_peers.remove(&user_id_from_request);
-        for (_, val) in &mut self.connected_peer_to_peers {
+        {
+            let connected_peer_to_peers = &mut(*(self.connected_peer_to_peers.write().await));
+            connected_peer_to_peers.remove(&user_id_from_request);
+            for (_, val) in connected_peer_to_peers {
                 val.remove(&user_id_from_request);
-        };
+            };
+        }
 
         //self.personal_chat_message_senders.remove(&user_id_from_request);
         //self.collective_chat_message_senders.remove(&user_id_from_request);
@@ -959,7 +1088,7 @@ impl Chat for HABChat {
         //self.collective_chat_closed_clients.remove(&user_id_from_request);
         if user_id_from_request != "" {
             let connected_clients = &mut(*(self.connected_clients.write().await));
-            if let Some(mut connected_client) = connected_clients.get_mut(&user_id_from_request) {
+            if let Some(connected_client) = connected_clients.get_mut(&user_id_from_request) {
                 connected_client.sender_collective_chat_closed_clients = Option::None;
                 connected_client.sender_chat_closed_clients = Option::None;
                 connected_client.sender_typing_message = Option::None;
@@ -1088,7 +1217,8 @@ impl Chat for HABChat {
             }
         } else {
             if clear_chat_from_request == true {
-                let peers = self.connected_peer_to_peers.get(&admin_id_from_request).unwrap();
+                let connected_peer_to_peers = &(*(self.connected_peer_to_peers.read().await));
+                let peers = connected_peer_to_peers.get(&admin_id_from_request).unwrap();
                 let connected_clients = &mut (*(self.connected_clients.write().await));
                 for peer in peers {
                     let connected_client = connected_clients.get_mut(peer).unwrap();
@@ -1233,6 +1363,7 @@ impl Chat for HABChat {
                 let user_id_from_request = uploadImageRequest.user_id;
                 println!("upload_image: user_id_from_request={}",&user_id_from_request);
                 let file_name_from_request = uploadImageRequest.image_name;
+                write_image_file_name_to_db(&user_id_from_request, &file_name_from_request);
                 println!("upload_image: file_name_from_request={}",&file_name_from_request);
                 // check if file with same file_name not exists
                 let file_name_path = Path::new(&file_name_from_request);
@@ -1285,9 +1416,15 @@ impl Chat for HABChat {
 
         let connected_clients = &(*(self.connected_clients.read().await));
         if let Some(connected_client) = connected_clients.get(&user_id_from_request) {
-            if let Some(image_name) = &connected_client.image_name {
+            let mut image_name = String::from("");
+            if let Some(image_name_ref) = &connected_client.image_name {
+                image_name = image_name_ref.clone();
+            } else {
+                image_name = read_image_file_name_from_db(&user_id_from_request);
+            }
+            if image_name != "" {
                 let user_imgs_path = Path::new(USER_IMAGES_DIR);
-                let file_name_path = Path::new(image_name);
+                let file_name_path = Path::new(&image_name);
                 let file_name_in_user_imgs_path = user_imgs_path.join(file_name_path);
                 if let Ok(file) = File::open(&file_name_in_user_imgs_path) {
                     let mut buf_reader = BufReader::new(file);
@@ -1389,11 +1526,48 @@ impl Chat for HABChat {
             } else {
                 println!("download_image: no image_name");
             }
+            
         } else {
             println!("download_image: no connected_client");
         }
 
         return Ok(Response::new(rx));
+    }
+    async fn remove_image(
+        &mut self,
+        request: Request<RemoveImageRequest>,
+    ) -> Result<tonic::Response<RemoveImageResponse>, tonic::Status> {
+        //todo: remove image_name from connected client user_id
+        //todo: remove image from USER_IMAGES_DIR
+        use std::fs;
+        let user_id_from_request = request.get_ref().user_id.clone();
+        let connected_clients = &mut (*(self.connected_clients.write().await));
+        let mut image_name = "".to_string();
+        if let Some(connected_client) = connected_clients.get_mut(&user_id_from_request) {
+            if let Some(image_name_ref) = &mut connected_client.image_name {
+                image_name = image_name_ref.clone();
+            
+                connected_client.image_name = Option::None;
+            }
+        }
+        if image_name == "" {
+            image_name = read_image_file_name_from_db(&user_id_from_request);
+        }
+        if image_name != "" {
+            let user_imgs_path = Path::new(USER_IMAGES_DIR);
+            let file_name_path = Path::new(&image_name);
+            let file_name_in_user_imgs_path = user_imgs_path.join(file_name_path);
+            if file_name_in_user_imgs_path.exists() == true {
+                fs::remove_file(&file_name_in_user_imgs_path);
+            }
+        }
+
+        write_image_file_name_to_db(&user_id_from_request, &"".to_string());
+
+        let reply = RemoveImageResponse {
+            response_code: 1
+        };
+        return Ok(Response::new(reply));
     }
 }
 
@@ -1493,19 +1667,59 @@ fn compute_distance(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
     return distance;
 }
 
+fn write_image_file_name_to_db(user_id: &String, file_name: &String) {
+    use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
+    let user_imgs_path = Path::new(USER_IMAGES_DIR);
+    let db_file_name_path = Path::new("users.db");
+    let file_name_in_user_imgs_path = user_imgs_path.join(db_file_name_path);
+    if Path::new(&user_imgs_path).exists() {
+        if Path::new(&file_name_in_user_imgs_path).exists() {
+            let db_res = PickleDb::load(&file_name_in_user_imgs_path, PickleDbDumpPolicy::DumpUponRequest, SerializationMethod::Json);
+            if let Ok(mut db) = db_res {
+                db.set(user_id, file_name).unwrap();
+                println!("The image of {} as loaded from file is: {}", user_id, db.get::<String>(user_id).unwrap());
+            } else {
+                let mut db = PickleDb::new(&file_name_in_user_imgs_path, PickleDbDumpPolicy::AutoDump, SerializationMethod::Json);
+                db.set(user_id, file_name).unwrap();
+                println!("The image of {} is: {}", user_id, db.get::<String>(user_id).unwrap());
+            }
+        } else {
+            let mut db = PickleDb::new(&file_name_in_user_imgs_path, PickleDbDumpPolicy::AutoDump, SerializationMethod::Json);
+            db.set(user_id, file_name).unwrap();
+        }
+    }
+}
+
+fn read_image_file_name_from_db(user_id: &String)->String {
+    use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
+    let user_imgs_path = Path::new(USER_IMAGES_DIR);
+    let db_file_name_path = Path::new("users.db");
+    let file_name_in_user_imgs_path = user_imgs_path.join(db_file_name_path);
+
+    let mut found_file_name = String::from("");
+    if Path::new(&file_name_in_user_imgs_path).exists() {
+        let db_res = PickleDb::load(&file_name_in_user_imgs_path, PickleDbDumpPolicy::DumpUponRequest, SerializationMethod::Json);
+        if let Ok(db) = db_res {
+            found_file_name = db.get::<String>(user_id).unwrap();
+        }
+    }
+    
+    return found_file_name;
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = CHAT_SERVER_ADDRESS.parse()?;
-    let mut chat = HABChat::default();
-    chat.searching_peers = RwLock::new(HashMap::new());
-    //chat.connected_peers_to_peers = Vec::new();
-    //chat.connected_clients = HashMap::new();
-    //chat.pending_messages = HashMap::new();
+    let mut hab_chat = HABChat::default();
+    hab_chat.searching_peers = RwLock::new(HashMap::new());
+    //hab_chat.connected_peers_to_peers = Vec::new();
+    //hab_chat.connected_clients = HashMap::new();
+    //hab_chat.pending_messages = HashMap::new();
 
     println!("ChatServer listening on {}", addr);
 
     Server::builder()
-        .add_service(ChatServer::new(chat))
+        .add_service(ChatServer::new(hab_chat))
         .serve(addr)
         .await?;
 

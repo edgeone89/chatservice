@@ -262,6 +262,16 @@ pub struct DownloadImageResponse {
     #[prost(bytes, tag = "2")]
     pub file_chunk: std::vec::Vec<u8>,
 }
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RemoveImageRequest {
+    #[prost(string, tag = "1")]
+    pub user_id: std::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RemoveImageResponse {
+    #[prost(int32, tag = "1")]
+    pub response_code: i32,
+}
 #[doc = r" Generated client implementations."]
 pub mod chat_client {
     #![allow(unused_variables, dead_code, missing_docs)]
@@ -359,11 +369,16 @@ pub mod chat_server {
     #[doc = "Generated trait containing gRPC methods that should be implemented for use with ChatServer."]
     #[async_trait]
     pub trait Chat: Send + Sync + 'static {
+        #[doc = "Server streaming response type for the NewPeer method."]
+        type NewPeerStream: Stream<Item = Result<super::NewPeerResponse, tonic::Status>>
+            + Send
+            + Sync
+            + 'static;
         async fn new_peer(
             &mut self,
             request: tonic::Request<super::NewPeerRequest>,
-        ) -> Result<tonic::Response<super::NewPeerResponse>, tonic::Status>;
-        #[doc = "Server streaming response type for the NewPeer method."]
+        ) -> Result<tonic::Response<Self::NewPeerStream>, tonic::Status>;
+        #[doc = "Server streaming response type for the SearchingPeer method."]
         type SearchingPeerStream: Stream<Item = Result<super::SearchingPeerResponse, tonic::Status>>
             + Send
             + Sync
@@ -482,6 +497,10 @@ pub mod chat_server {
             &self,
             request: tonic::Request<super::DownloadImageRequest>,
         ) -> Result<tonic::Response<Self::DownloadImageStream>, tonic::Status>;
+        async fn remove_image(
+            &mut self,
+            request: tonic::Request<super::RemoveImageRequest>,
+        ) -> Result<tonic::Response<super::RemoveImageResponse>, tonic::Status>;
     }
     #[derive(Debug)]
     #[doc(hidden)]
@@ -519,9 +538,11 @@ pub mod chat_server {
                 "/chatservice.Chat/NewPeer" => {
                     #[allow(non_camel_case_types)]
                     struct NewPeerSvc<T: Chat>(pub Arc<Mutex<T>>);
-                    impl<T: Chat> tonic::server::UnaryService<super::NewPeerRequest> for NewPeerSvc<T> {
+                    impl<T: Chat> tonic::server::ServerStreamingService<super::NewPeerRequest> for NewPeerSvc<T> {
                         type Response = super::NewPeerResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        type ResponseStream = T::NewPeerStream;
+                        type Future =
+                            BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::NewPeerRequest>,
@@ -530,13 +551,13 @@ pub mod chat_server {
                             let fut = async move {
                                 let mut tmp_inner = inner.lock().await;
                                 tmp_inner.new_peer(request).await
-                             };
+                            };
                             Box::pin(fut)
                         }
                     }
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let interceptor = inner.1.clone();
+                        let interceptor = inner.1;
                         let inner = inner.0;
                         let method = NewPeerSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
@@ -545,7 +566,7 @@ pub mod chat_server {
                         } else {
                             tonic::server::Grpc::new(codec)
                         };
-                        let res = grpc.unary(method, req).await;
+                        let res = grpc.server_streaming(method, req).await;
                         Ok(res)
                     };
                     Box::pin(fut)
@@ -1137,6 +1158,40 @@ pub mod chat_server {
                             tonic::server::Grpc::new(codec)
                         };
                         let res = grpc.server_streaming(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/chatservice.Chat/RemoveImage" => {
+                    #[allow(non_camel_case_types)]
+                    struct RemoveImageSvc<T: Chat>(pub Arc<Mutex<T>>);
+                    impl<T: Chat> tonic::server::UnaryService<super::RemoveImageRequest> for RemoveImageSvc<T> {
+                        type Response = super::RemoveImageResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::RemoveImageRequest>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move { 
+                                let mut tmp_inner = inner.lock().await;
+                                tmp_inner.remove_image(request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let interceptor = inner.1.clone();
+                        let inner = inner.0;
+                        let method = RemoveImageSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = if let Some(interceptor) = interceptor {
+                            tonic::server::Grpc::with_interceptor(codec, interceptor)
+                        } else {
+                            tonic::server::Grpc::new(codec)
+                        };
+                        let res = grpc.unary(method, req).await;
                         Ok(res)
                     };
                     Box::pin(fut)

@@ -192,8 +192,16 @@ message DownloadImageResponse {
     bytes file_chunk = 2;
 }
 
+message RemoveImageRequest {
+    string user_id = 1;
+}
+
+message RemoveImageResponse {
+    int32 response_code = 1;
+}
+
 service Chat {
-    rpc NewPeer (NewPeerRequest) returns (NewPeerResponse) {}
+    rpc NewPeer (NewPeerRequest) returns (stream NewPeerResponse) {}
     rpc SearchingPeer(SearchingPeerRequest) returns (stream SearchingPeerResponse) {}
     rpc NewCoordinates(NewCoordinatesRequest) returns(NewCoordinatesResponse) {}
     rpc NewMessage(NewMessageRequest) returns (stream NewMessageResponse) {}
@@ -210,4 +218,5 @@ service Chat {
     rpc ReportUser(ReportUserRequest) returns(ReportUserResponse){}
     rpc UploadImage(stream UploadImageRequest) returns(UploadImageResponse){}
     rpc DownloadImage(DownloadImageRequest) returns(stream DownloadImageResponse){}
+    rpc RemoveImage(RemoveImageRequest) returns(RemoveImageResponse) {}
 }
