@@ -28,4 +28,4 @@ lto = true # enable link time optimization
 
 [profile.dev]
 opt-level = 0
-lto = false # enable link time optimization
+lto = false # disable link time optimization

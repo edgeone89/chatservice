@@ -8,8 +8,6 @@ use tokio::sync::mpsc::UnboundedReceiver;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::VecDeque;
-use std::sync::mpsc::Sender as stdSender;
-use std::sync::mpsc::Receiver as stdReceiver;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::sync::RwLock;
@@ -100,10 +98,10 @@ enum UserBlockTime {
 
 #[derive(Default)]
 struct HABChat {
-    connected_clients: RwLock<HashMap<String, ConnectedClient>>,
-    searching_peers: RwLock<HashMap<String, SearchingPeer>>,
-    connected_peer_to_peer: RwLock<HashMap<String, String>>,
-    connected_peer_to_peers: RwLock<HashMap<String, HashSet<String>>>,
+    connected_clients: Arc<RwLock<HashMap<String, ConnectedClient>>>,
+    searching_peers: Arc<RwLock<HashMap<String, SearchingPeer>>>,
+    connected_peer_to_peer: Arc<RwLock<HashMap<String, String>>>,
+    connected_peer_to_peers: Arc<RwLock<HashMap<String, HashSet<String>>>>,
     //chat_closed_clients: HashMap<String, Sender<Result<ChatClosedResponse, Status>>>,
     //collective_chat_closed_clients: HashMap<String, Sender<Result<CollectiveChatClosedResponse, Status>>>,
 }
@@ -111,7 +109,7 @@ struct HABChat {
 pub struct DropReceiver<T> {
     rx: Receiver<T>,
     user_id: String,
-    hab_chat: &'static mut HABChat
+    hab_chat: Arc<std::sync::Mutex<&'static mut HABChat>>
 }
 //unsafe impl<T: Send> Send for DropReceiver<T> {}
 impl<T> tokio::stream::Stream for DropReceiver<T> {
@@ -130,14 +128,14 @@ impl<T> Deref for DropReceiver<T> {
 }
 impl<T> Drop for DropReceiver<T> {
     fn drop(&mut self) {
-        println!("RECEIVER has been DROPPED");
+        println!("RECEIVER {} has been DROPPED", &self.user_id);
         //self.hab_chat.lock().unwrap().connected_clients.remove(&self.user_id);
-        let hab_chat = &mut self.hab_chat;
+        let hab_chat = &mut self.hab_chat.lock().unwrap();
         {
             use futures::executor;
             let user_id = self.user_id.clone();
             let lock = &mut hab_chat.connected_clients;
-            executor::block_on(async{
+            executor::block_on(async {
                 let connected_clients = &mut(*(lock.write().await));
                 connected_clients.remove(&user_id);
             });
@@ -179,7 +177,7 @@ impl<T> Drop for DropReceiver<T> {
                         //tokio::spawn(async move {
                             // sending response to client
                             tx_tmp.send(Ok(reply_to_peer)).await;
-                            println!("new peer: sent response peer closed");
+                            println!("drop peer: sent response peer closed");
                         //});
                     }
                 }
@@ -239,7 +237,7 @@ impl Chat for HABChat {
         let receiver = DropReceiver{
             rx: rx,
             user_id: request.get_ref().user_id.clone(),
-            hab_chat: extend_lifetime(self)
+            hab_chat: Arc::new(std::sync::Mutex::new(extend_lifetime(self)))
         };
         return Ok(Response::new(receiver));
     }
@@ -319,7 +317,7 @@ impl Chat for HABChat {
                     let lon1 = lng_from_request;
                     let lat2 = (*val).lat;
                     let lon2 = (*val).lng;
-                    let actual_distance_between_peers = compute_distance(lat1, lon1, lat2, lon2) as i32;
+                    let actual_distance_between_peers = compute_distance(lat1, lon1, lat2, lon2).round() as i32;
                     println!("actual_distance_between_peers={}",actual_distance_between_peers);
                     if actual_distance_between_peers <= (*val).visible_in_radius_in_meters
                     {
@@ -328,6 +326,7 @@ impl Chat for HABChat {
                             if val.age >= searching_min_age_from_request && val.age <= searching_max_age_from_request {
                                 if val.searching_gender == gender_from_request || val.searching_gender == "gender_all" {
                                     if age_from_request >= val.searching_min_age && age_from_request <= val.searching_max_age {
+                                        println!("if age_from_request >= val.searching_min_age");
                                         let connected_peer_to_peers = &mut(*(self.connected_peer_to_peers.write().await));
                                         if connected_peer_to_peers.contains_key(&user_id_from_request) == true {
                                             let peers = connected_peer_to_peers.get_mut(&user_id_from_request).unwrap();
@@ -345,8 +344,11 @@ impl Chat for HABChat {
                                         let peer_user_name = (*val).user_name.clone();
                                         let peer_description = (*val).description.clone();
                                         let connected_clients = &(*(self.connected_clients.read().await));
-                                        //fixme: thread 'tokio-runtime-worker' panicked at 'called `Option::unwrap()` on a `None` value', src/main.rs:341:91
-                                        let is_admin_on = connected_clients.get(&peer_id).unwrap().is_admin_on;
+                                        
+                                        let mut is_admin_on = false;
+                                        if let Some(connected_client) = connected_clients.get(&peer_id) {
+                                            is_admin_on = connected_client.is_admin_on;
+                                        }
                                         let reply_to_peer1 = chatservice::SearchingPeerResponse {
                                             response_code: 1,
                                             user_id: peer_id,
@@ -404,7 +406,10 @@ impl Chat for HABChat {
                                         let peer2_user_name = user_name_from_request.clone();
                                         let peer2_description = description_from_request.clone();
                                         let connected_clients = &(*(self.connected_clients.read().await));
-                                        let is_admin_on = connected_clients.get(&peer2_id).unwrap().is_admin_on;
+                                        let mut is_admin_on = false;
+                                        if let Some(connected_client) = connected_clients.get(&peer2_id) {
+                                            is_admin_on = connected_client.is_admin_on;
+                                        }
                                         let reply_to_peer2 = chatservice::SearchingPeerResponse {
                                             response_code: 1,
                                             user_id: peer2_id,
@@ -489,8 +494,11 @@ impl Chat for HABChat {
     ) -> Result<tonic::Response<NewCoordinatesResponse>, tonic::Status>
     {
         let user_id_from_request = request.get_ref().user_id.clone();
+        println!("new coordinates from {}", &user_id_from_request);
         let lat_from_request = request.get_ref().latitude;
         let lng_from_request = request.get_ref().longitude;
+        println!("lat: {}", &lat_from_request);
+        println!("lng: {}", &lng_from_request);
 
         {
             let searching_peers = &mut (*self.searching_peers.write().await);
@@ -503,29 +511,24 @@ impl Chat for HABChat {
         let searching_peers = &(*self.searching_peers.read().await);
         if searching_peers.contains_key(&user_id_from_request) == true {
             let searching_peer = searching_peers.get(&user_id_from_request).unwrap();
+            let searching_gender_from_request = searching_peer.searching_gender.clone();
+            let searching_min_age_from_request = searching_peer.searching_min_age;
+            let searching_max_age_from_request = searching_peer.searching_max_age;
+            let gender_from_request = searching_peer.gender.clone();
+            let age_from_request = searching_peer.age;
+            let visible_in_radius_in_meters_from_request = searching_peer.visible_in_radius_in_meters;
+            let status_from_request = searching_peer.status.clone();
+            let status_color_id_from_request = searching_peer.status_color_id;
+            let user_name_from_request = searching_peer.user_name.clone();
+            let description_from_request = searching_peer.description.clone();
             for (key, value) in searching_peers {
                 if key != &user_id_from_request {
                     if value.is_searching == true {
-                        let distance = compute_distance(lat_from_request, lng_from_request, value.lat, value.lng) as i32;
+                        let distance = compute_distance(lat_from_request, lng_from_request, value.lat, value.lng).round() as i32;
+                        println!("distance between peers:{}", &distance);
                         if value.visible_in_radius_in_meters < distance {
+                            println!("new coordinates: value.visible_in_radius_in_meters < distance");
                             let mut tx_tmp = (*searching_peer).tx.clone();
-                            let reply = chatservice::SearchingPeerResponse {
-                                response_code: 4,
-                                user_id: user_id_from_request.to_string(),
-                                radius_distance_in_meters: -1,
-                                status: "".to_string(),
-                                status_color_id: -1,
-                                user_name: "".to_string(),
-                                description: "".to_string(),
-                                is_admin_on: false
-                            };
-                            tokio::spawn(async move {
-                                tx_tmp.send(Ok(reply)).await;
-                            });
-                        }
-
-                        if searching_peer.visible_in_radius_in_meters < distance {
-                            let mut tx_tmp = (*value).tx.clone();
                             let reply = chatservice::SearchingPeerResponse {
                                 response_code: 4,
                                 user_id: key.to_string(),
@@ -539,6 +542,107 @@ impl Chat for HABChat {
                             tokio::spawn(async move {
                                 tx_tmp.send(Ok(reply)).await;
                             });
+                        } else {
+                            if searching_gender_from_request == value.gender || searching_gender_from_request == "gender_all" {
+                                if value.age >= searching_min_age_from_request && value.age <= searching_max_age_from_request {
+                                    if value.searching_gender == gender_from_request || value.searching_gender == "gender_all" {
+                                        if age_from_request >= value.searching_min_age && age_from_request <= value.searching_max_age {
+                        
+                                            let peer_id: String = (*key).clone();
+                                            let peer_radius_distance_in_meters = (*value).visible_in_radius_in_meters;
+                                            let peer_status = (*value).status.clone();
+                                            let peer_status_color_id = (*value).status_color_id;
+                                            let peer_user_name = (*value).user_name.clone();
+                                            let peer_description = (*value).description.clone();
+                                            let connected_clients = &(*(self.connected_clients.read().await));
+                                            
+                                            let mut is_admin_on = false;
+                                            if let Some(connected_client) = connected_clients.get(&peer_id) {
+                                                is_admin_on = connected_client.is_admin_on;
+                                            }
+                                            let reply_to_peer1 = chatservice::SearchingPeerResponse {
+                                                response_code: 1,
+                                                user_id: peer_id,
+                                                radius_distance_in_meters: peer_radius_distance_in_meters,
+                                                status: peer_status,
+                                                status_color_id: peer_status_color_id,
+                                                user_name: peer_user_name,
+                                                description: peer_description,
+                                                is_admin_on: is_admin_on
+                                            };
+                        
+                                            let mut tx_tmp = searching_peer.tx.clone();
+                                            tokio::spawn(async move {
+                                                // sending response to client
+                                                let res = tx_tmp.send(Ok(reply_to_peer1)).await;
+                                                if let Ok(res_ok) = res {
+                                                    println!("searching_peer: sent response");
+                                                }
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if searching_peer.visible_in_radius_in_meters < distance {
+                            println!("new coordinates: searching_peer.visible_in_radius_in_meters < distance");
+                            let mut tx_tmp = (*value).tx.clone();
+                            let reply = chatservice::SearchingPeerResponse {
+                                response_code: 4,
+                                user_id: user_id_from_request.to_string(),
+                                radius_distance_in_meters: -1,
+                                status: "".to_string(),
+                                status_color_id: -1,
+                                user_name: "".to_string(),
+                                description: "".to_string(),
+                                is_admin_on: false
+                            };
+                            tokio::spawn(async move {
+                                tx_tmp.send(Ok(reply)).await;
+                            });
+                        } else {
+
+                            if searching_gender_from_request == value.gender || searching_gender_from_request == "gender_all" {
+                                if value.age >= searching_min_age_from_request && value.age <= searching_max_age_from_request {
+                                    if value.searching_gender == gender_from_request || value.searching_gender == "gender_all" {
+                                        if age_from_request >= value.searching_min_age && age_from_request <= value.searching_max_age {
+
+                                            let peer2_id: String = user_id_from_request.clone();
+                                            let peer2_radius_distance_in_meters = visible_in_radius_in_meters_from_request;
+                                            let peer2_status = status_from_request.clone();
+                                            let peer2_status_color_id = status_color_id_from_request;
+                                            let peer2_user_name = user_name_from_request.clone();
+                                            let peer2_description = description_from_request.clone();
+                                            let connected_clients = &(*(self.connected_clients.read().await));
+                                            let mut is_admin_on = false;
+                                            if let Some(connected_client) = connected_clients.get(&peer2_id) {
+                                                is_admin_on = connected_client.is_admin_on;
+                                            }
+                                            let reply_to_peer2 = chatservice::SearchingPeerResponse {
+                                                response_code: 1,
+                                                user_id: peer2_id,
+                                                radius_distance_in_meters: peer2_radius_distance_in_meters,
+                                                status: peer2_status,
+                                                status_color_id: peer2_status_color_id,
+                                                user_name: peer2_user_name,
+                                                description: peer2_description,
+                                                is_admin_on: is_admin_on
+                                            };
+        
+                                            let mut tx_tmp = (*value).tx.clone();
+                                            tokio::spawn(async move {
+                                                // sending response to client
+                                                let res = tx_tmp.send(Ok(reply_to_peer2)).await;
+                                                if let Ok(res_ok) = res {
+                                                    println!("searching_peer: sent response");
+                                                }
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+
                         }
                     }
                 }
@@ -1250,29 +1354,30 @@ impl Chat for HABChat {
         let blocking_time_from_request = request.get_ref().blocking_time.clone();
 
         let connected_clients = &mut (*(self.connected_clients.write().await));
-        let connected_client = connected_clients.get_mut(&user_id_from_request).unwrap();
-        if blocked_user_id_from_request == "" {
-            println!("blocked_user_id_from_request == \"\"");
-            if connected_client.sender_blocked_in_personal_chat.is_some() != true {
-                println!("if connected_client.stream_blocked_in_personal_chat.is_none");
-                connected_client.sender_blocked_in_personal_chat = Some(tx.clone());
-            }
-        }else {
-            println!("blocked_user_id_from_request != \"\"");
-            if blocking_time_from_request != "" {
-                println!("blocking_time_from_request != \"\"");
-                let blocked_connected_client = connected_clients.get_mut(&blocked_user_id_from_request).unwrap();
-                if let Some(mut tx_tmp) = blocked_connected_client.sender_blocked_in_personal_chat.clone() {
-                    println!("if let Some(mut tx_tmp) = blocked_connected_client.stream_blocked_in_personal_chat.clone()");
-                    let reply = BlockUserInPersonalChatResponse{
-                        response_code: 1,
-                        blocking_time: blocking_time_from_request,
-                        user_id: user_id_from_request
-                    };
-                    tokio::spawn(async move {
-                        tx_tmp.send(Ok(reply)).await;
-                        println!("sent a block_user_in_personal_chat");
-                    });
+        if let Some(connected_client) = connected_clients.get_mut(&user_id_from_request) {
+            if blocked_user_id_from_request == "" {
+                println!("blocked_user_id_from_request == \"\"");
+                if connected_client.sender_blocked_in_personal_chat.is_some() != true {
+                    println!("if connected_client.stream_blocked_in_personal_chat.is_none");
+                    connected_client.sender_blocked_in_personal_chat = Some(tx.clone());
+                }
+            }else {
+                println!("blocked_user_id_from_request != \"\"");
+                if blocking_time_from_request != "" {
+                    println!("blocking_time_from_request != \"\"");
+                    let blocked_connected_client = connected_clients.get_mut(&blocked_user_id_from_request).unwrap();
+                    if let Some(mut tx_tmp) = blocked_connected_client.sender_blocked_in_personal_chat.clone() {
+                        println!("if let Some(mut tx_tmp) = blocked_connected_client.stream_blocked_in_personal_chat.clone()");
+                        let reply = BlockUserInPersonalChatResponse{
+                            response_code: 1,
+                            blocking_time: blocking_time_from_request,
+                            user_id: user_id_from_request
+                        };
+                        tokio::spawn(async move {
+                            tx_tmp.send(Ok(reply)).await;
+                            println!("sent a block_user_in_personal_chat");
+                        });
+                    }
                 }
             }
         }
@@ -1700,7 +1805,9 @@ fn read_image_file_name_from_db(user_id: &String)->String {
     if Path::new(&file_name_in_user_imgs_path).exists() {
         let db_res = PickleDb::load(&file_name_in_user_imgs_path, PickleDbDumpPolicy::DumpUponRequest, SerializationMethod::Json);
         if let Ok(db) = db_res {
-            found_file_name = db.get::<String>(user_id).unwrap();
+            if let Some(file_name) = db.get::<String>(user_id) {
+                found_file_name = file_name;
+            }
         }
     }
     
@@ -1711,7 +1818,7 @@ fn read_image_file_name_from_db(user_id: &String)->String {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = CHAT_SERVER_ADDRESS.parse()?;
     let mut hab_chat = HABChat::default();
-    hab_chat.searching_peers = RwLock::new(HashMap::new());
+    hab_chat.searching_peers = Arc::new(RwLock::new(HashMap::new()));
     //hab_chat.connected_peers_to_peers = Vec::new();
     //hab_chat.connected_clients = HashMap::new();
     //hab_chat.pending_messages = HashMap::new();
