@@ -3,13 +3,9 @@ use tonic::{transport::Server, Request, Response, Status};
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::mpsc::Receiver;
-use tokio::sync::mpsc::UnboundedSender;
-use tokio::sync::mpsc::UnboundedReceiver;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::collections::VecDeque;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 use tokio::sync::RwLock;
 use tokio::stream::StreamExt;
 use std::path::Path;
@@ -111,7 +107,7 @@ pub struct DropReceiver<T> {
     user_id: String,
     hab_chat: Arc<std::sync::Mutex<&'static mut HABChat>>
 }
-//unsafe impl<T: Send> Send for DropReceiver<T> {}
+
 impl<T> tokio::stream::Stream for DropReceiver<T> {
     type Item = T;
     
@@ -129,36 +125,66 @@ impl<T> Deref for DropReceiver<T> {
 impl<T> Drop for DropReceiver<T> {
     fn drop(&mut self) {
         println!("RECEIVER {} has been DROPPED", &self.user_id);
-        //self.hab_chat.lock().unwrap().connected_clients.remove(&self.user_id);
-        let hab_chat = &mut self.hab_chat.lock().unwrap();
-        {
+        
+        if let Ok(hab_chat) = &mut self.hab_chat.lock() {
             use futures::executor;
             let user_id = self.user_id.clone();
-            let lock = &mut hab_chat.connected_clients;
+            
             executor::block_on(async {
-                let connected_clients = &mut(*(lock.write().await));
+                let connected_clients = &mut (*(hab_chat.connected_clients.write().await));
                 connected_clients.remove(&user_id);
             });
-            
+                
             executor::block_on(async {
                 let searching_peers = &mut (*(hab_chat.searching_peers.write().await));
                 searching_peers.remove(&user_id);
             });
+                
             executor::block_on(async {
-                let connected_peer_to_peer = &mut(*(hab_chat.connected_peer_to_peer.write().await));
+                let connected_peer_to_peer = &mut (*(hab_chat.connected_peer_to_peer.write().await));
+                if let Some(another_peer) = connected_peer_to_peer.get(&user_id){
+                    let connected_clients = &(*(hab_chat.connected_clients.read().await));
+                    if let Some(another_client) = connected_clients.get(another_peer) {
+                        if let Some(mut tx_tmp) = another_client.sender_chat_closed_clients.clone() {
+                            let reply = ChatClosedResponse{};
+                            tokio::spawn(async move {
+                                tx_tmp.send(Ok(reply)).await;
+                                println!("sent a chat_closed ");
+                            });
+                        }
+                    }
+                }
                 connected_peer_to_peer.retain(|key, val| {
                     key != &user_id || val != &user_id
                 });
             });
-    
-            // удалить из connected_peers_to_peers по user_id, если есть
+                
             executor::block_on(async {
-                let connected_peer_to_peers = &mut(*(hab_chat.connected_peer_to_peers.write().await));
+                // удалить из connected_peers_to_peers по user_id, если есть
+                let connected_peer_to_peers = &mut (*(hab_chat.connected_peer_to_peers.write().await));
+                let peers_opt = connected_peer_to_peers.get(&user_id);
+                if let Some(peers) = peers_opt{
+                    let connected_clients = &(*(hab_chat.connected_clients.read().await));
+                    for user_id2 in peers {
+                        if connected_clients.contains_key(user_id2) == true {
+                            if let Some(connected_client) = connected_clients.get(user_id2){
+                                if let Some(mut tx_tmp) = connected_client.sender_collective_chat_closed_clients.clone() {
+                                    let reply = CollectiveChatClosedResponse{};
+                                    tokio::spawn(async move {
+                                        tx_tmp.send(Ok(reply)).await;
+                                        println!("sent a collective_chat_closed ");
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
                 connected_peer_to_peers.remove(&user_id);
                 for (_, val) in connected_peer_to_peers {
                     val.remove(&user_id);
                 };
             });
+
             executor::block_on(async {
                 let searching_peers = &(*(hab_chat.searching_peers.read().await));
                 for (key, val) in searching_peers {
@@ -176,8 +202,11 @@ impl<T> Drop for DropReceiver<T> {
                         let mut tx_tmp = val.tx.clone();
                         //tokio::spawn(async move {
                             // sending response to client
-                            tx_tmp.send(Ok(reply_to_peer)).await;
-                            println!("drop peer: sent response peer closed");
+                            if let Ok(_) = tx_tmp.send(Ok(reply_to_peer)).await {
+                                println!("drop peer: sent response peer closed");
+                            } else {
+                                println!("drop peer: problem while sending response peer closed");
+                            }
                         //});
                     }
                 }
@@ -187,9 +216,9 @@ impl<T> Drop for DropReceiver<T> {
     }
 }
 
-fn extend_lifetime<'short_lifetime>(r: &'short_lifetime mut HABChat) -> &'static mut HABChat {
+fn extend_lifetime<'short_lifetime>(hab_chat_ref: &'short_lifetime mut HABChat) -> &'static mut HABChat {
     return unsafe {
-        std::mem::transmute::<&'short_lifetime mut HABChat, &'static mut HABChat>(r)
+        std::mem::transmute::<&'short_lifetime mut HABChat, &'static mut HABChat>(hab_chat_ref)
     };
 }
 
@@ -272,21 +301,22 @@ impl Chat for HABChat {
         {
             let mut searching_peers = self.searching_peers.write().await;
             if searching_peers.contains_key(&user_id_from_request) == true {
-                let searching_peer = searching_peers.get_mut(&user_id_from_request).unwrap();
-                searching_peer.lat = lat_from_request;
-                searching_peer.lng = lng_from_request;
-                searching_peer.status = status_from_request.clone();
-                searching_peer.status_color_id = status_color_id_from_request;
-                searching_peer.visible_in_radius_in_meters = visible_in_radius_in_meters_from_request;
-                searching_peer.user_name = user_name_from_request.clone();
-                searching_peer.description = description_from_request.clone();
-                searching_peer.gender = gender_from_request.clone();
-                searching_peer.age = age_from_request;
-                searching_peer.searching_gender = searching_gender_from_request.clone();
-                searching_peer.searching_max_age = searching_max_age_from_request;
-                searching_peer.searching_min_age = searching_min_age_from_request;
-                searching_peer.is_searching = is_searching_from_request;
-                searching_peer.tx = tx.clone();
+                if let Some(searching_peer) = searching_peers.get_mut(&user_id_from_request){
+                    searching_peer.lat = lat_from_request;
+                    searching_peer.lng = lng_from_request;
+                    searching_peer.status = status_from_request.clone();
+                    searching_peer.status_color_id = status_color_id_from_request;
+                    searching_peer.visible_in_radius_in_meters = visible_in_radius_in_meters_from_request;
+                    searching_peer.user_name = user_name_from_request.clone();
+                    searching_peer.description = description_from_request.clone();
+                    searching_peer.gender = gender_from_request.clone();
+                    searching_peer.age = age_from_request;
+                    searching_peer.searching_gender = searching_gender_from_request.clone();
+                    searching_peer.searching_max_age = searching_max_age_from_request;
+                    searching_peer.searching_min_age = searching_min_age_from_request;
+                    searching_peer.is_searching = is_searching_from_request;
+                    searching_peer.tx = tx.clone();
+                }
             } else {
                 let new_searching_peer = SearchingPeer{
                     lat: lat_from_request,
@@ -329,8 +359,9 @@ impl Chat for HABChat {
                                         println!("if age_from_request >= val.searching_min_age");
                                         let connected_peer_to_peers = &mut(*(self.connected_peer_to_peers.write().await));
                                         if connected_peer_to_peers.contains_key(&user_id_from_request) == true {
-                                            let peers = connected_peer_to_peers.get_mut(&user_id_from_request).unwrap();
-                                            peers.insert((*key).clone());
+                                            if let Some(peers) = connected_peer_to_peers.get_mut(&user_id_from_request) {
+                                                peers.insert((*key).clone());
+                                            }
                                         } else {
                                             let mut peers = HashSet::new();
                                             peers.insert((*key).clone());
@@ -392,8 +423,9 @@ impl Chat for HABChat {
                                         println!("if actual_distance_between_peers <= visible_in_radius_in_meters");
                                         let connected_peer_to_peers = &mut(*(self.connected_peer_to_peers.write().await));
                                         if connected_peer_to_peers.contains_key(key) == true {
-                                            let peers = connected_peer_to_peers.get_mut(key).unwrap();
-                                            peers.insert(user_id_from_request.clone());
+                                            if let Some(peers) = connected_peer_to_peers.get_mut(key) {
+                                                peers.insert(user_id_from_request.clone());
+                                            }
                                         } else {
                                             let mut peers = HashSet::new();
                                             peers.insert(user_id_from_request.clone());
@@ -503,146 +535,149 @@ impl Chat for HABChat {
         {
             let searching_peers = &mut (*self.searching_peers.write().await);
             if searching_peers.contains_key(&user_id_from_request) == true {
-                let searching_peer = searching_peers.get_mut(&user_id_from_request).unwrap();
-                searching_peer.lat = lat_from_request;
-                searching_peer.lng = lng_from_request;
+                if let Some(searching_peer) = searching_peers.get_mut(&user_id_from_request) {
+                    searching_peer.lat = lat_from_request;
+                    searching_peer.lng = lng_from_request;
+                }
             }
         }
         let searching_peers = &(*self.searching_peers.read().await);
         if searching_peers.contains_key(&user_id_from_request) == true {
-            let searching_peer = searching_peers.get(&user_id_from_request).unwrap();
-            let searching_gender_from_request = searching_peer.searching_gender.clone();
-            let searching_min_age_from_request = searching_peer.searching_min_age;
-            let searching_max_age_from_request = searching_peer.searching_max_age;
-            let gender_from_request = searching_peer.gender.clone();
-            let age_from_request = searching_peer.age;
-            let visible_in_radius_in_meters_from_request = searching_peer.visible_in_radius_in_meters;
-            let status_from_request = searching_peer.status.clone();
-            let status_color_id_from_request = searching_peer.status_color_id;
-            let user_name_from_request = searching_peer.user_name.clone();
-            let description_from_request = searching_peer.description.clone();
-            for (key, value) in searching_peers {
-                if key != &user_id_from_request {
-                    if value.is_searching == true {
-                        let distance = compute_distance(lat_from_request, lng_from_request, value.lat, value.lng).round() as i32;
-                        println!("distance between peers:{}", &distance);
-                        if value.visible_in_radius_in_meters < distance {
-                            println!("new coordinates: value.visible_in_radius_in_meters < distance");
-                            let mut tx_tmp = (*searching_peer).tx.clone();
-                            let reply = chatservice::SearchingPeerResponse {
-                                response_code: 4,
-                                user_id: key.to_string(),
-                                radius_distance_in_meters: -1,
-                                status: "".to_string(),
-                                status_color_id: -1,
-                                user_name: "".to_string(),
-                                description: "".to_string(),
-                                is_admin_on: false
-                            };
-                            tokio::spawn(async move {
-                                tx_tmp.send(Ok(reply)).await;
-                            });
-                        } else {
-                            if searching_gender_from_request == value.gender || searching_gender_from_request == "gender_all" {
-                                if value.age >= searching_min_age_from_request && value.age <= searching_max_age_from_request {
-                                    if value.searching_gender == gender_from_request || value.searching_gender == "gender_all" {
-                                        if age_from_request >= value.searching_min_age && age_from_request <= value.searching_max_age {
-                        
-                                            let peer_id: String = (*key).clone();
-                                            let peer_radius_distance_in_meters = (*value).visible_in_radius_in_meters;
-                                            let peer_status = (*value).status.clone();
-                                            let peer_status_color_id = (*value).status_color_id;
-                                            let peer_user_name = (*value).user_name.clone();
-                                            let peer_description = (*value).description.clone();
-                                            let connected_clients = &(*(self.connected_clients.read().await));
-                                            
-                                            let mut is_admin_on = false;
-                                            if let Some(connected_client) = connected_clients.get(&peer_id) {
-                                                is_admin_on = connected_client.is_admin_on;
-                                            }
-                                            let reply_to_peer1 = chatservice::SearchingPeerResponse {
-                                                response_code: 1,
-                                                user_id: peer_id,
-                                                radius_distance_in_meters: peer_radius_distance_in_meters,
-                                                status: peer_status,
-                                                status_color_id: peer_status_color_id,
-                                                user_name: peer_user_name,
-                                                description: peer_description,
-                                                is_admin_on: is_admin_on
-                                            };
-                        
-                                            let mut tx_tmp = searching_peer.tx.clone();
-                                            tokio::spawn(async move {
-                                                // sending response to client
-                                                let res = tx_tmp.send(Ok(reply_to_peer1)).await;
-                                                if let Ok(res_ok) = res {
-                                                    println!("searching_peer: sent response");
+            if let Some(searching_peer) = searching_peers.get(&user_id_from_request) {
+                let searching_gender_from_request = searching_peer.searching_gender.clone();
+                let searching_min_age_from_request = searching_peer.searching_min_age;
+                let searching_max_age_from_request = searching_peer.searching_max_age;
+                let gender_from_request = searching_peer.gender.clone();
+                let age_from_request = searching_peer.age;
+                let visible_in_radius_in_meters_from_request = searching_peer.visible_in_radius_in_meters;
+                let status_from_request = searching_peer.status.clone();
+                let status_color_id_from_request = searching_peer.status_color_id;
+                let user_name_from_request = searching_peer.user_name.clone();
+                let description_from_request = searching_peer.description.clone();
+
+                for (key, value) in searching_peers {
+                    if key != &user_id_from_request {
+                        if value.is_searching == true {
+                            let distance = compute_distance(lat_from_request, lng_from_request, value.lat, value.lng).round() as i32;
+                            println!("distance between peers:{}", &distance);
+                            if value.visible_in_radius_in_meters < distance {
+                                println!("new coordinates: value.visible_in_radius_in_meters < distance");
+                                let mut tx_tmp = (*searching_peer).tx.clone();
+                                let reply = chatservice::SearchingPeerResponse {
+                                    response_code: 4,
+                                    user_id: key.to_string(),
+                                    radius_distance_in_meters: -1,
+                                    status: "".to_string(),
+                                    status_color_id: -1,
+                                    user_name: "".to_string(),
+                                    description: "".to_string(),
+                                    is_admin_on: false
+                                };
+                                tokio::spawn(async move {
+                                    tx_tmp.send(Ok(reply)).await;
+                                });
+                            } else {
+                                if searching_gender_from_request == value.gender || searching_gender_from_request == "gender_all" {
+                                    if value.age >= searching_min_age_from_request && value.age <= searching_max_age_from_request {
+                                        if value.searching_gender == gender_from_request || value.searching_gender == "gender_all" {
+                                            if age_from_request >= value.searching_min_age && age_from_request <= value.searching_max_age {
+                            
+                                                let peer_id: String = (*key).clone();
+                                                let peer_radius_distance_in_meters = (*value).visible_in_radius_in_meters;
+                                                let peer_status = (*value).status.clone();
+                                                let peer_status_color_id = (*value).status_color_id;
+                                                let peer_user_name = (*value).user_name.clone();
+                                                let peer_description = (*value).description.clone();
+                                                let connected_clients = &(*(self.connected_clients.read().await));
+                                                
+                                                let mut is_admin_on = false;
+                                                if let Some(connected_client) = connected_clients.get(&peer_id) {
+                                                    is_admin_on = connected_client.is_admin_on;
                                                 }
-                                            });
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        if searching_peer.visible_in_radius_in_meters < distance {
-                            println!("new coordinates: searching_peer.visible_in_radius_in_meters < distance");
-                            let mut tx_tmp = (*value).tx.clone();
-                            let reply = chatservice::SearchingPeerResponse {
-                                response_code: 4,
-                                user_id: user_id_from_request.to_string(),
-                                radius_distance_in_meters: -1,
-                                status: "".to_string(),
-                                status_color_id: -1,
-                                user_name: "".to_string(),
-                                description: "".to_string(),
-                                is_admin_on: false
-                            };
-                            tokio::spawn(async move {
-                                tx_tmp.send(Ok(reply)).await;
-                            });
-                        } else {
-
-                            if searching_gender_from_request == value.gender || searching_gender_from_request == "gender_all" {
-                                if value.age >= searching_min_age_from_request && value.age <= searching_max_age_from_request {
-                                    if value.searching_gender == gender_from_request || value.searching_gender == "gender_all" {
-                                        if age_from_request >= value.searching_min_age && age_from_request <= value.searching_max_age {
-
-                                            let peer2_id: String = user_id_from_request.clone();
-                                            let peer2_radius_distance_in_meters = visible_in_radius_in_meters_from_request;
-                                            let peer2_status = status_from_request.clone();
-                                            let peer2_status_color_id = status_color_id_from_request;
-                                            let peer2_user_name = user_name_from_request.clone();
-                                            let peer2_description = description_from_request.clone();
-                                            let connected_clients = &(*(self.connected_clients.read().await));
-                                            let mut is_admin_on = false;
-                                            if let Some(connected_client) = connected_clients.get(&peer2_id) {
-                                                is_admin_on = connected_client.is_admin_on;
+                                                let reply_to_peer1 = chatservice::SearchingPeerResponse {
+                                                    response_code: 1,
+                                                    user_id: peer_id,
+                                                    radius_distance_in_meters: peer_radius_distance_in_meters,
+                                                    status: peer_status,
+                                                    status_color_id: peer_status_color_id,
+                                                    user_name: peer_user_name,
+                                                    description: peer_description,
+                                                    is_admin_on: is_admin_on
+                                                };
+                            
+                                                let mut tx_tmp = searching_peer.tx.clone();
+                                                tokio::spawn(async move {
+                                                    // sending response to client
+                                                    let res = tx_tmp.send(Ok(reply_to_peer1)).await;
+                                                    if let Ok(res_ok) = res {
+                                                        println!("searching_peer: sent response");
+                                                    }
+                                                });
                                             }
-                                            let reply_to_peer2 = chatservice::SearchingPeerResponse {
-                                                response_code: 1,
-                                                user_id: peer2_id,
-                                                radius_distance_in_meters: peer2_radius_distance_in_meters,
-                                                status: peer2_status,
-                                                status_color_id: peer2_status_color_id,
-                                                user_name: peer2_user_name,
-                                                description: peer2_description,
-                                                is_admin_on: is_admin_on
-                                            };
-        
-                                            let mut tx_tmp = (*value).tx.clone();
-                                            tokio::spawn(async move {
-                                                // sending response to client
-                                                let res = tx_tmp.send(Ok(reply_to_peer2)).await;
-                                                if let Ok(res_ok) = res {
-                                                    println!("searching_peer: sent response");
-                                                }
-                                            });
                                         }
                                     }
                                 }
                             }
 
+                            if searching_peer.visible_in_radius_in_meters < distance {
+                                println!("new coordinates: searching_peer.visible_in_radius_in_meters < distance");
+                                let mut tx_tmp = (*value).tx.clone();
+                                let reply = chatservice::SearchingPeerResponse {
+                                    response_code: 4,
+                                    user_id: user_id_from_request.to_string(),
+                                    radius_distance_in_meters: -1,
+                                    status: "".to_string(),
+                                    status_color_id: -1,
+                                    user_name: "".to_string(),
+                                    description: "".to_string(),
+                                    is_admin_on: false
+                                };
+                                tokio::spawn(async move {
+                                    tx_tmp.send(Ok(reply)).await;
+                                });
+                            } else {
+
+                                if searching_gender_from_request == value.gender || searching_gender_from_request == "gender_all" {
+                                    if value.age >= searching_min_age_from_request && value.age <= searching_max_age_from_request {
+                                        if value.searching_gender == gender_from_request || value.searching_gender == "gender_all" {
+                                            if age_from_request >= value.searching_min_age && age_from_request <= value.searching_max_age {
+
+                                                let peer2_id: String = user_id_from_request.clone();
+                                                let peer2_radius_distance_in_meters = visible_in_radius_in_meters_from_request;
+                                                let peer2_status = status_from_request.clone();
+                                                let peer2_status_color_id = status_color_id_from_request;
+                                                let peer2_user_name = user_name_from_request.clone();
+                                                let peer2_description = description_from_request.clone();
+                                                let connected_clients = &(*(self.connected_clients.read().await));
+                                                let mut is_admin_on = false;
+                                                if let Some(connected_client) = connected_clients.get(&peer2_id) {
+                                                    is_admin_on = connected_client.is_admin_on;
+                                                }
+                                                let reply_to_peer2 = chatservice::SearchingPeerResponse {
+                                                    response_code: 1,
+                                                    user_id: peer2_id,
+                                                    radius_distance_in_meters: peer2_radius_distance_in_meters,
+                                                    status: peer2_status,
+                                                    status_color_id: peer2_status_color_id,
+                                                    user_name: peer2_user_name,
+                                                    description: peer2_description,
+                                                    is_admin_on: is_admin_on
+                                                };
+            
+                                                let mut tx_tmp = (*value).tx.clone();
+                                                tokio::spawn(async move {
+                                                    // sending response to client
+                                                    let res = tx_tmp.send(Ok(reply_to_peer2)).await;
+                                                    if let Ok(res_ok) = res {
+                                                        println!("searching_peer: sent response");
+                                                    }
+                                                });
+                                            }
+                                        }
+                                    }
+                                }
+
+                            }
                         }
                     }
                 }
@@ -690,57 +725,72 @@ impl Chat for HABChat {
                     let connected_peer_to_peer = &(*(self.connected_peer_to_peer.read().await));
                     if connected_peer_to_peer.contains_key(&user_id2_from_request) == true {
                         println!("if self.connected_peer_to_peer.contains_key(&user_id2_from_request) == true");
-                        let another_peer = connected_peer_to_peer.get(&user_id2_from_request).unwrap();
-                        if another_peer == &user_id_from_request {
-                            println!("if another_peer == &user_id_from_request ");
-                            if let Some(tx_tmp_ref) = &connected_client.sender_personal_chat_message {
-                                let mut tx_tmp = (*tx_tmp_ref).clone();
-                                let reply = chatservice::NewMessageResponse {
-                                    response_code: 1,
-                                    message: message_from_request.clone()
-                                };
-                                tokio::spawn(async move {
-                                    tx_tmp.send(Ok(reply)).await;
-                                });
+                        if let Some(another_peer) = connected_peer_to_peer.get(&user_id2_from_request) {
+                            if another_peer == &user_id_from_request {
+                                println!("if another_peer == &user_id_from_request ");
+                                if let Some(tx_tmp_ref) = &connected_client.sender_personal_chat_message {
+                                    let mut tx_tmp = (*tx_tmp_ref).clone();
+                                    let reply = chatservice::NewMessageResponse {
+                                        response_code: 1,
+                                        message: message_from_request.clone()
+                                    };
+                                    tokio::spawn(async move {
+                                        tx_tmp.send(Ok(reply)).await;
+                                    });
+                                }
+                            } else {
+                                println!("if another_peer != &user_id_from_request ");
+                                if let Ok(mut client) = PushNotificationsClient::connect(PUSH_NOTIFITCATION_SERVER_ADDRESS).await {
+                                    let request = Request::new(PushNotificationRequest{
+                                        user_id: user_id_from_request,
+                                        message: message_from_request,
+                                        to_user_id: user_id2_from_request
+                                    });
+                                    if let Ok(_) = client.send_push_notification(request).await {
+                                        println!("sent push notification");
+                                    }
+                                } else {
+                                    print!("error while connecting to push notifitcation server");
+                                }
                             }
-                        } else {
-                            println!("if another_peer != &user_id_from_request ");
-                            let mut client = PushNotificationsClient::connect(PUSH_NOTIFITCATION_SERVER_ADDRESS).await.unwrap();
+                        }
+                    } else {
+                        println!("if self.connected_peer_to_peer.contains_key(&user_id2_from_request) == false");
+                        if let Ok(mut client) = PushNotificationsClient::connect(PUSH_NOTIFITCATION_SERVER_ADDRESS).await {
                             let request = Request::new(PushNotificationRequest{
                                 user_id: user_id_from_request,
                                 message: message_from_request,
                                 to_user_id: user_id2_from_request
                             });
                             client.send_push_notification(request).await;
+                        } else {
+                            print!("error while connecting to push notifitcation server");
                         }
-                    } else {
-                        println!("if self.connected_peer_to_peer.contains_key(&user_id2_from_request) == false");
-                        let mut client = PushNotificationsClient::connect(PUSH_NOTIFITCATION_SERVER_ADDRESS).await.unwrap();
+                    }
+                } else {
+                    println!("PushNotificationsClient");
+                    if let Ok(mut client) = PushNotificationsClient::connect(PUSH_NOTIFITCATION_SERVER_ADDRESS).await {
                         let request = Request::new(PushNotificationRequest{
                             user_id: user_id_from_request,
                             message: message_from_request,
                             to_user_id: user_id2_from_request
                         });
                         client.send_push_notification(request).await;
+                    } else {
+                        print!("error while connecting to push notifitcation server");
                     }
-                } else {
-                    println!("PushNotificationsClient");
-                    let mut client = PushNotificationsClient::connect(PUSH_NOTIFITCATION_SERVER_ADDRESS).await.unwrap();
+                }
+            } else {
+                if let Ok(mut client) = PushNotificationsClient::connect(PUSH_NOTIFITCATION_SERVER_ADDRESS).await {
                     let request = Request::new(PushNotificationRequest{
                         user_id: user_id_from_request,
                         message: message_from_request,
                         to_user_id: user_id2_from_request
                     });
                     client.send_push_notification(request).await;
+                } else {
+                    print!("error while connecting to push notifitcation server");
                 }
-            } else {
-                let mut client = PushNotificationsClient::connect(PUSH_NOTIFITCATION_SERVER_ADDRESS).await.unwrap();
-                let request = Request::new(PushNotificationRequest{
-                    user_id: user_id_from_request,
-                    message: message_from_request,
-                    to_user_id: user_id2_from_request
-                });
-                client.send_push_notification(request).await;
             }
         }
         return Ok(Response::new(rx));
@@ -784,105 +834,25 @@ impl Chat for HABChat {
                 if admin_id_from_request != "" {
                     let connected_clients = &(*(self.connected_clients.read().await));
                     if connected_clients.contains_key(&admin_id_from_request) == true {
-                        let connected_client = connected_clients.get(&admin_id_from_request).unwrap();
-                        if let Some(tx_tmp_ref) = &connected_client.sender_collective_chat_message {
-                            let mut tx_tmp = (*tx_tmp_ref).clone();
-                            if connected_client.is_admin_on == false {
-                                let reply = chatservice::NewCollectiveMessageResponse {
-                                    response_code: -1,
-                                    message: "".to_string(),
-                                    user_name: "".to_string(),
-                                    user_id: "".to_string()
-                                };
-                                tokio::spawn(async move {
-                                    tx_tmp.send(Ok(reply)).await;
-                                });
-                            } else {
-                                let reply = chatservice::NewCollectiveMessageResponse {
-                                    response_code: 1,
-                                    message: "".to_string(),
-                                    user_name: user_name_from_request.clone(),
-                                    user_id: user_id_from_request.clone()
-                                };
-                                tokio::spawn(async move {
-                                    tx_tmp.send(Ok(reply)).await;
-                                });
-                            }
-                        }
-                    }
-                }
-            } else {
-                if user_id_from_request != "" {
-                    let connected_clients = &(*(self.connected_clients.read().await));
-                    if connected_clients.contains_key(&user_id_from_request) == true {
-                        let connected_client = connected_clients.get(&admin_id_from_request).unwrap();
-                        if let Some(tx_tmp_ref) = &connected_client.sender_collective_chat_message {
-
-                            let mut tx_tmp = (*tx_tmp_ref).clone();
-                            if connected_client.is_admin_on == false {
-                                let reply = chatservice::NewCollectiveMessageResponse {
-                                    response_code: -1,
-                                    message: "".to_string(),
-                                    user_name: "".to_string(),
-                                    user_id: "".to_string()
-                                };
-                                tokio::spawn(async move {
-                                    tx_tmp.send(Ok(reply)).await;
-                                });
-                            } else {
-                                let reply = chatservice::NewCollectiveMessageResponse {
-                                    response_code: 1,
-                                    message: "".to_string(),
-                                    user_name: user_name_from_request.clone(),
-                                    user_id: user_id_from_request.clone()
-                                };
-                                tokio::spawn(async move {
-                                    tx_tmp.send(Ok(reply)).await;
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-        } else {
-            if is_admin_from_request == true {
-                if admin_id_from_request != "" {
-                    let connected_clients = &(*(self.connected_clients.read().await));
-                    if connected_clients.contains_key(&admin_id_from_request) == true {
-                        let connected_client = connected_clients.get(&admin_id_from_request).unwrap();
-                        if connected_client.is_admin_on == true {
-                            let connected_peer_to_peers = &(*(self.connected_peer_to_peers.read().await));
-                            let peers = connected_peer_to_peers.get(&admin_id_from_request).unwrap();
-                            for peer in peers {
-                                
-                                if let Some(connected_peer) = connected_clients.get(peer) {
-                                    if let Some(tx_tmp_ref) = &connected_peer.sender_collective_chat_message {
-                                
-                                        let mut tx_tmp = (*tx_tmp_ref).clone();
-                                        let reply = chatservice::NewCollectiveMessageResponse {
-                                            response_code: 1,
-                                            message: message_from_request.clone(),
-                                            user_name: user_name_from_request.clone(),
-                                            user_id: admin_id_from_request.clone()
-                                        };
-                                        tokio::spawn(async move {
-                                            tx_tmp.send(Ok(reply)).await;
-                                            println!("sent a new_collective_message from admin");
-                                        });
-
-                                    }
-                                }
-                                
-                            }
-                        } else {
-                            if let Some(connected_client) = connected_clients.get(&user_id_from_request) {
-                                if let Some(tx_tmp_ref) = &connected_client.sender_collective_chat_message {
-                                    let mut tx_tmp = (*tx_tmp_ref).clone();
+                        if let Some(connected_client) = connected_clients.get(&admin_id_from_request) {
+                            if let Some(tx_tmp_ref) = &connected_client.sender_collective_chat_message {
+                                let mut tx_tmp = (*tx_tmp_ref).clone();
+                                if connected_client.is_admin_on == false {
                                     let reply = chatservice::NewCollectiveMessageResponse {
                                         response_code: -1,
                                         message: "".to_string(),
                                         user_name: "".to_string(),
                                         user_id: "".to_string()
+                                    };
+                                    tokio::spawn(async move {
+                                        tx_tmp.send(Ok(reply)).await;
+                                    });
+                                } else {
+                                    let reply = chatservice::NewCollectiveMessageResponse {
+                                        response_code: 1,
+                                        message: "".to_string(),
+                                        user_name: user_name_from_request.clone(),
+                                        user_id: user_id_from_request.clone()
                                     };
                                     tokio::spawn(async move {
                                         tx_tmp.send(Ok(reply)).await;
@@ -893,25 +863,108 @@ impl Chat for HABChat {
                     }
                 }
             } else {
-                let connected_peer_to_peers = &(*(self.connected_peer_to_peers.read().await));
-                let peers = connected_peer_to_peers.get(&admin_id_from_request).unwrap();
-                println!("self.connected_peer_to_peers.get(&admin_id_from_request).unwrap()");
-                let connected_clients = &(*(self.connected_clients.read().await));
-                for peer in peers {
-                    if peer != &user_id_from_request {
-                        if let Some(connected_client) = connected_clients.get(peer) {
+                if user_id_from_request != "" {
+                    let connected_clients = &(*(self.connected_clients.read().await));
+                    if connected_clients.contains_key(&user_id_from_request) == true {
+                        if let Some(connected_client) = connected_clients.get(&admin_id_from_request) {
                             if let Some(tx_tmp_ref) = &connected_client.sender_collective_chat_message {
                                 let mut tx_tmp = (*tx_tmp_ref).clone();
-                                let reply = chatservice::NewCollectiveMessageResponse {
-                                    response_code: 1,
-                                    message: message_from_request.clone(),
-                                    user_name: user_name_from_request.clone(),
-                                    user_id: user_id_from_request.clone()
-                                };
-                                tokio::spawn(async move {
-                                    tx_tmp.send(Ok(reply)).await;
-                                    println!("sent a new_collective_message from non-admin");
-                                });
+                                if connected_client.is_admin_on == false {
+                                    let reply = chatservice::NewCollectiveMessageResponse {
+                                        response_code: -1,
+                                        message: "".to_string(),
+                                        user_name: "".to_string(),
+                                        user_id: "".to_string()
+                                    };
+                                    tokio::spawn(async move {
+                                        tx_tmp.send(Ok(reply)).await;
+                                    });
+                                } else {
+                                    let reply = chatservice::NewCollectiveMessageResponse {
+                                        response_code: 1,
+                                        message: "".to_string(),
+                                        user_name: user_name_from_request.clone(),
+                                        user_id: user_id_from_request.clone()
+                                    };
+                                    tokio::spawn(async move {
+                                        tx_tmp.send(Ok(reply)).await;
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            if is_admin_from_request == true {
+                if admin_id_from_request != "" {
+                    let connected_clients = &(*(self.connected_clients.read().await));
+                    if connected_clients.contains_key(&admin_id_from_request) == true {
+                        if let Some(connected_client) = connected_clients.get(&admin_id_from_request) {
+                            if connected_client.is_admin_on == true {
+                                let connected_peer_to_peers = &(*(self.connected_peer_to_peers.read().await));
+                                if let Some(peers) = connected_peer_to_peers.get(&admin_id_from_request) {
+                                    for peer in peers {
+                                        if let Some(connected_peer) = connected_clients.get(peer) {
+                                            if let Some(tx_tmp_ref) = &connected_peer.sender_collective_chat_message {
+                                        
+                                                let mut tx_tmp = (*tx_tmp_ref).clone();
+                                                let reply = chatservice::NewCollectiveMessageResponse {
+                                                    response_code: 1,
+                                                    message: message_from_request.clone(),
+                                                    user_name: user_name_from_request.clone(),
+                                                    user_id: admin_id_from_request.clone()
+                                                };
+                                                tokio::spawn(async move {
+                                                    tx_tmp.send(Ok(reply)).await;
+                                                    println!("sent a new_collective_message from admin");
+                                                });
+        
+                                            }
+                                        }
+                                        
+                                    }
+                                }
+                            } else {
+                                if let Some(connected_client) = connected_clients.get(&user_id_from_request) {
+                                    if let Some(tx_tmp_ref) = &connected_client.sender_collective_chat_message {
+                                        let mut tx_tmp = (*tx_tmp_ref).clone();
+                                        let reply = chatservice::NewCollectiveMessageResponse {
+                                            response_code: -1,
+                                            message: "".to_string(),
+                                            user_name: "".to_string(),
+                                            user_id: "".to_string()
+                                        };
+                                        tokio::spawn(async move {
+                                            tx_tmp.send(Ok(reply)).await;
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                let connected_clients = &(*(self.connected_clients.read().await));
+                let connected_peer_to_peers = &(*(self.connected_peer_to_peers.read().await));
+                if let Some(peers) = connected_peer_to_peers.get(&admin_id_from_request) {
+                    println!("self.connected_peer_to_peers.get(&admin_id_from_request)");
+                    for peer in peers {
+                        if peer != &user_id_from_request {
+                            if let Some(connected_client) = connected_clients.get(peer) {
+                                if let Some(tx_tmp_ref) = &connected_client.sender_collective_chat_message {
+                                    let mut tx_tmp = (*tx_tmp_ref).clone();
+                                    let reply = chatservice::NewCollectiveMessageResponse {
+                                        response_code: 1,
+                                        message: message_from_request.clone(),
+                                        user_name: user_name_from_request.clone(),
+                                        user_id: user_id_from_request.clone()
+                                    };
+                                    tokio::spawn(async move {
+                                        tx_tmp.send(Ok(reply)).await;
+                                        println!("sent a new_collective_message from non-admin");
+                                    });
+                                }
                             }
                         }
                     }
@@ -931,7 +984,6 @@ impl Chat for HABChat {
                                 tx_tmp.send(Ok(reply)).await;
                                 println!("sent a new_collective_message from non-admin");
                             });
-
                         }
                     }
                 }
@@ -985,7 +1037,7 @@ impl Chat for HABChat {
         } else {
             //if self.typing_message_senders.len() > 1 {
                 // send "typing message" to many users in the same radius
-                //let peers = self.connected_peer_to_peers.get(&user_id_from_request).unwrap();
+                //let peers = self.connected_peer_to_peers.get(&user_id_from_request);
                 let connected_peer_to_peers = &(*(self.connected_peer_to_peers.read().await));
                 if let Some(peers) = connected_peer_to_peers.get(&user_id_from_request) {
                     for peer in peers {
@@ -1043,15 +1095,16 @@ impl Chat for HABChat {
                             //if self.chat_closed_clients.contains_key(&user_id2_from_request) == true {
                             let connected_clients = &(*(self.connected_clients.read().await));
                             if connected_clients.contains_key(&user_id2_from_request) == true {
-                                //let tx_tmp_ref = self.chat_closed_clients.get(&user_id2_from_request).unwrap();
+                                //let tx_tmp_ref = self.chat_closed_clients.get(&user_id2_from_request);
                                 //let mut tx_tmp = (*tx_tmp_ref).clone();
-                                let connected_client = connected_clients.get(&user_id2_from_request).unwrap();
-                                if let Some(mut tx_tmp) = connected_client.sender_chat_closed_clients.clone() {
-                                    let reply = ChatClosedResponse{};
-                                    tokio::spawn(async move {
-                                        tx_tmp.send(Ok(reply)).await;
-                                        println!("sent a chat_closed ");
-                                    });
+                                if let Some(connected_client) = connected_clients.get(&user_id2_from_request) {
+                                    if let Some(mut tx_tmp) = connected_client.sender_chat_closed_clients.clone() {
+                                        let reply = ChatClosedResponse{};
+                                        tokio::spawn(async move {
+                                            tx_tmp.send(Ok(reply)).await;
+                                            println!("sent a chat_closed ");
+                                        });
+                                    }
                                 }
                             }
                         }
@@ -1100,9 +1153,10 @@ impl Chat for HABChat {
         //self.collective_chat_closed_clients.entry(user_id_from_request.clone()).or_insert(tx.clone());
         {
             let connected_clients = &mut(*(self.connected_clients.write().await));
-            let connected_client = connected_clients.get_mut(&user_id_from_request).unwrap();
-            if connected_client.sender_collective_chat_closed_clients.is_some() != true {
-                connected_client.sender_collective_chat_closed_clients = Some(tx.clone());
+            if let Some(connected_client) = connected_clients.get_mut(&user_id_from_request) {
+                if connected_client.sender_collective_chat_closed_clients.is_some() != true {
+                    connected_client.sender_collective_chat_closed_clients = Some(tx.clone());
+                }
             }
         }
         
@@ -1115,15 +1169,15 @@ impl Chat for HABChat {
                 for user_id2 in peers {
                     //if self.collective_chat_closed_clients.contains_key(user_id2) == true {
                       if connected_clients.contains_key(user_id2) == true {
-                          let connected_client = connected_clients.get(user_id2).unwrap();
-                        //let tx_tmp_ref = self.collective_chat_closed_clients.get(user_id2).unwrap();
-                        //let mut tx_tmp = (*tx_tmp_ref).clone();
-                        if let Some(mut tx_tmp) = connected_client.sender_collective_chat_closed_clients.clone() {
-                            let reply = CollectiveChatClosedResponse{};
-                            tokio::spawn(async move {
-                                tx_tmp.send(Ok(reply)).await;
-                                println!("sent a collective_chat_closed ");
-                            });
+                        if let Some(connected_client) = connected_clients.get(user_id2) {
+                                                        
+                            if let Some(mut tx_tmp) = connected_client.sender_collective_chat_closed_clients.clone() {
+                                let reply = CollectiveChatClosedResponse{};
+                                tokio::spawn(async move {
+                                    tx_tmp.send(Ok(reply)).await;
+                                    println!("sent a collective_chat_closed ");
+                                });
+                            }
                         }
                     }
                 }
@@ -1135,11 +1189,12 @@ impl Chat for HABChat {
             
             //self.collective_chat_closed_clients.remove(&user_id_from_request);
             let connected_clients = &mut (*(self.connected_clients.write().await));
-            let connected_client = connected_clients.get_mut(&user_id_from_request).unwrap();
-            connected_client.sender_collective_chat_closed_clients = Option::None;
-            connected_client.sender_clear_collective_chat = Option::None;
-            connected_client.sender_typing_message = Option::None;
-            connected_client.sender_collective_chat_message = Option::None;
+            if let Some(connected_client) = connected_clients.get_mut(&user_id_from_request) {
+                connected_client.sender_collective_chat_closed_clients = Option::None;
+                connected_client.sender_clear_collective_chat = Option::None;
+                connected_client.sender_typing_message = Option::None;
+                connected_client.sender_collective_chat_message = Option::None;
+            }
             
             //self.collective_chat_closed_clients.remove(user_id2);
             /*self.connected_peer_to_peers.remove(&user_id_from_request);
@@ -1272,9 +1327,10 @@ impl Chat for HABChat {
         if admin_id_from_request == "" {
             if blocked_user_id_from_request != "" {
                 let connected_clients = &mut (*(self.connected_clients.write().await));
-                let blocked_connected_client = connected_clients.get_mut(&blocked_user_id_from_request).unwrap();
-                if blocked_connected_client.sender_blocked_in_collective_chat.is_some() != true {
-                    blocked_connected_client.sender_blocked_in_collective_chat = Some(tx.clone());
+                if let Some(blocked_connected_client) = connected_clients.get_mut(&blocked_user_id_from_request) {
+                    if blocked_connected_client.sender_blocked_in_collective_chat.is_some() != true {
+                        blocked_connected_client.sender_blocked_in_collective_chat = Some(tx.clone());
+                    }
                 }
             }
         } else {
@@ -1285,13 +1341,14 @@ impl Chat for HABChat {
                     blocking_time: blocking_time_from_request
                 };
                 let connected_clients = &mut (*(self.connected_clients.write().await));
-                let blocked_connected_client = connected_clients.get_mut(&blocked_user_id_from_request).unwrap();
-                let stream_blocked_in_collective_chat = blocked_connected_client.sender_blocked_in_collective_chat.clone();
-                if let Some(mut tx_tmp) = stream_blocked_in_collective_chat {
-                    tokio::spawn(async move {
-                        tx_tmp.send(Ok(reply)).await;
-                        println!("sent a block_user_in_collective_chat");
-                    });
+                if let Some(blocked_connected_client) = connected_clients.get_mut(&blocked_user_id_from_request) {
+                    let stream_blocked_in_collective_chat = blocked_connected_client.sender_blocked_in_collective_chat.clone();
+                    if let Some(mut tx_tmp) = stream_blocked_in_collective_chat {
+                        tokio::spawn(async move {
+                            tx_tmp.send(Ok(reply)).await;
+                            println!("sent a block_user_in_collective_chat");
+                        });
+                    }
                 }
             }
         }
@@ -1322,17 +1379,20 @@ impl Chat for HABChat {
         } else {
             if clear_chat_from_request == true {
                 let connected_peer_to_peers = &(*(self.connected_peer_to_peers.read().await));
-                let peers = connected_peer_to_peers.get(&admin_id_from_request).unwrap();
-                let connected_clients = &mut (*(self.connected_clients.write().await));
-                for peer in peers {
-                    let connected_client = connected_clients.get_mut(peer).unwrap();
-                    if let Some(mut tx_tmp) = connected_client.sender_clear_collective_chat.clone() {
-                        let reply = ClearCollectiveChatResponse {
-                        };
-                        tokio::spawn(async move {
-                            tx_tmp.send(Ok(reply)).await;
-                            println!("sent a clear_collective_chat");
-                        });
+                if let Some(peers) = connected_peer_to_peers.get(&admin_id_from_request) {
+                    let connected_clients = &mut (*(self.connected_clients.write().await));
+
+                    for peer in peers {
+                        if let Some(connected_client) = connected_clients.get_mut(peer) {
+                            if let Some(mut tx_tmp) = connected_client.sender_clear_collective_chat.clone() {
+                                let reply = ClearCollectiveChatResponse {
+                                };
+                                tokio::spawn(async move {
+                                    tx_tmp.send(Ok(reply)).await;
+                                    println!("sent a clear_collective_chat");
+                                });
+                            }
+                        }
                     }
                 }
             }
@@ -1365,18 +1425,19 @@ impl Chat for HABChat {
                 println!("blocked_user_id_from_request != \"\"");
                 if blocking_time_from_request != "" {
                     println!("blocking_time_from_request != \"\"");
-                    let blocked_connected_client = connected_clients.get_mut(&blocked_user_id_from_request).unwrap();
-                    if let Some(mut tx_tmp) = blocked_connected_client.sender_blocked_in_personal_chat.clone() {
-                        println!("if let Some(mut tx_tmp) = blocked_connected_client.stream_blocked_in_personal_chat.clone()");
-                        let reply = BlockUserInPersonalChatResponse{
-                            response_code: 1,
-                            blocking_time: blocking_time_from_request,
-                            user_id: user_id_from_request
-                        };
-                        tokio::spawn(async move {
-                            tx_tmp.send(Ok(reply)).await;
-                            println!("sent a block_user_in_personal_chat");
-                        });
+                    if let Some(blocked_connected_client) = connected_clients.get_mut(&blocked_user_id_from_request) {
+                        if let Some(mut tx_tmp) = blocked_connected_client.sender_blocked_in_personal_chat.clone() {
+                            println!("if let Some(mut tx_tmp) = blocked_connected_client.stream_blocked_in_personal_chat.clone()");
+                            let reply = BlockUserInPersonalChatResponse{
+                                response_code: 1,
+                                blocking_time: blocking_time_from_request,
+                                user_id: user_id_from_request
+                            };
+                            tokio::spawn(async move {
+                                tx_tmp.send(Ok(reply)).await;
+                                println!("sent a block_user_in_personal_chat");
+                            });
+                        }
                     }
                 }
             }
@@ -1416,19 +1477,20 @@ impl Chat for HABChat {
                     });
                 }
             } else {
-                let another_connected_client = connected_clients.get_mut(&user_id_from_request).unwrap();
-                if let Some(mut tx_tmp) = another_connected_client.sender_clear_personal_chat.clone() {
-                    println!("another_connected_client.stream_clear_personal_chat.clone()");
-                    let reply = ClearPersonalChatResponse{
-                        response_code: 1
-                    };
-                    tokio::spawn(async move {
-                        let res = tx_tmp.send(Ok(reply)).await;
-                        match res {
-                            Ok(_) =>println!("sent a clear_personal_chat"),
-                            Err(e) =>println!(" clear_personal_chat ERROR: {}", e)
-                        }
-                    });
+                if let Some(another_connected_client) = connected_clients.get_mut(&user_id_from_request) {
+                    if let Some(mut tx_tmp) = another_connected_client.sender_clear_personal_chat.clone() {
+                        println!("another_connected_client.stream_clear_personal_chat.clone()");
+                        let reply = ClearPersonalChatResponse{
+                            response_code: 1
+                        };
+                        tokio::spawn(async move {
+                            let res = tx_tmp.send(Ok(reply)).await;
+                            match res {
+                                Ok(_) =>println!("sent a clear_personal_chat"),
+                                Err(e) =>println!(" clear_personal_chat ERROR: {}", e)
+                            }
+                        });
+                    }
                 }
             }
         }
@@ -1496,7 +1558,7 @@ impl Chat for HABChat {
                             }
                         }
                     }
-                    buf_writer.flush().unwrap();
+                    buf_writer.flush();
                     println!("upload_image: upload success");
                 } else {
                     println!("upload_image: file with same name exists");
@@ -1781,16 +1843,24 @@ fn write_image_file_name_to_db(user_id: &String, file_name: &String) {
         if Path::new(&file_name_in_user_imgs_path).exists() {
             let db_res = PickleDb::load(&file_name_in_user_imgs_path, PickleDbDumpPolicy::DumpUponRequest, SerializationMethod::Json);
             if let Ok(mut db) = db_res {
-                db.set(user_id, file_name).unwrap();
-                println!("The image of {} as loaded from file is: {}", user_id, db.get::<String>(user_id).unwrap());
+                let res = db.set(user_id, file_name);
+                if let Ok(_) = res {
+                    println!("The image of {} loaded from file", user_id);
+                }
             } else {
                 let mut db = PickleDb::new(&file_name_in_user_imgs_path, PickleDbDumpPolicy::AutoDump, SerializationMethod::Json);
-                db.set(user_id, file_name).unwrap();
-                println!("The image of {} is: {}", user_id, db.get::<String>(user_id).unwrap());
+                let res = db.set(user_id, file_name);
+                if let Ok(_) = res {
+                    println!("The image of {} loaded from file", user_id);
+                    //println!("The image of {} is: {}", user_id, db.get::<String>(user_id));
+                }
             }
         } else {
             let mut db = PickleDb::new(&file_name_in_user_imgs_path, PickleDbDumpPolicy::AutoDump, SerializationMethod::Json);
-            db.set(user_id, file_name).unwrap();
+            let res = db.set(user_id, file_name);
+            if let Ok(_) = res {
+                println!("The image of {} loaded from file", user_id);
+            }
         }
     }
 }
