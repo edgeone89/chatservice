@@ -1,7 +1,7 @@
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NewPeerRequest {
     #[prost(string, tag = "1")]
-    pub user_id: std::string::String,
+    pub user_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NewPeerResponse {
@@ -11,9 +11,9 @@ pub struct NewPeerResponse {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SearchingPeerRequest {
     #[prost(string, tag = "1")]
-    pub user_id: std::string::String,
+    pub user_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub status: std::string::String,
+    pub status: ::prost::alloc::string::String,
     #[prost(double, tag = "3")]
     pub latitude: f64,
     #[prost(double, tag = "4")]
@@ -21,19 +21,19 @@ pub struct SearchingPeerRequest {
     #[prost(int32, tag = "5")]
     pub visible_in_radius_in_meters: i32,
     #[prost(string, tag = "6")]
-    pub user_name: std::string::String,
+    pub user_name: ::prost::alloc::string::String,
     #[prost(int32, tag = "7")]
     pub status_color_id: i32,
     #[prost(string, tag = "8")]
-    pub description: std::string::String,
+    pub description: ::prost::alloc::string::String,
     #[prost(bool, tag = "9")]
     pub is_searching: bool,
     #[prost(string, tag = "10")]
-    pub gender: std::string::String,
+    pub gender: ::prost::alloc::string::String,
     #[prost(int32, tag = "11")]
     pub age: i32,
     #[prost(string, tag = "12")]
-    pub searching_gender: std::string::String,
+    pub searching_gender: ::prost::alloc::string::String,
     #[prost(int32, tag = "13")]
     pub searching_min_age: i32,
     #[prost(int32, tag = "14")]
@@ -44,24 +44,24 @@ pub struct SearchingPeerResponse {
     #[prost(int32, tag = "1")]
     pub response_code: i32,
     #[prost(string, tag = "2")]
-    pub user_id: std::string::String,
+    pub user_id: ::prost::alloc::string::String,
     #[prost(int32, tag = "3")]
     pub radius_distance_in_meters: i32,
     #[prost(string, tag = "4")]
-    pub status: std::string::String,
+    pub status: ::prost::alloc::string::String,
     #[prost(int32, tag = "5")]
     pub status_color_id: i32,
     #[prost(string, tag = "6")]
-    pub user_name: std::string::String,
+    pub user_name: ::prost::alloc::string::String,
     #[prost(string, tag = "7")]
-    pub description: std::string::String,
+    pub description: ::prost::alloc::string::String,
     #[prost(bool, tag = "8")]
     pub is_admin_on: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NewCoordinatesRequest {
     #[prost(string, tag = "1")]
-    pub user_id: std::string::String,
+    pub user_id: ::prost::alloc::string::String,
     #[prost(double, tag = "2")]
     pub latitude: f64,
     #[prost(double, tag = "3")]
@@ -72,29 +72,29 @@ pub struct NewCoordinatesResponse {}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NewMessageRequest {
     #[prost(string, tag = "1")]
-    pub user_id: std::string::String,
+    pub user_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub message: std::string::String,
+    pub message: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
-    pub to_user_id: std::string::String,
+    pub to_user_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NewMessageResponse {
     #[prost(int32, tag = "1")]
     pub response_code: i32,
     #[prost(string, tag = "2")]
-    pub message: std::string::String,
+    pub message: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NewCollectiveMessageRequest {
     #[prost(string, tag = "1")]
-    pub user_id: std::string::String,
+    pub user_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub message: std::string::String,
+    pub message: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
-    pub admin_id: std::string::String,
+    pub admin_id: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
-    pub user_name: std::string::String,
+    pub user_name: ::prost::alloc::string::String,
     #[prost(bool, tag = "5")]
     pub is_admin: bool,
 }
@@ -103,18 +103,18 @@ pub struct NewCollectiveMessageResponse {
     #[prost(int32, tag = "1")]
     pub response_code: i32,
     #[prost(string, tag = "2")]
-    pub message: std::string::String,
+    pub message: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
-    pub user_name: std::string::String,
+    pub user_name: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
-    pub user_id: std::string::String,
+    pub user_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TypingMessageRequest {
     #[prost(string, tag = "1")]
-    pub user_id: std::string::String,
+    pub user_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub to_user_id: std::string::String,
+    pub to_user_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TypingMessageResponse {
@@ -124,18 +124,18 @@ pub struct TypingMessageResponse {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ChatClosedRequest {
     #[prost(string, tag = "1")]
-    pub user_id: std::string::String,
+    pub user_id: ::prost::alloc::string::String,
     #[prost(bool, tag = "2")]
     pub is_closed: bool,
     #[prost(string, tag = "3")]
-    pub to_user_id: std::string::String,
+    pub to_user_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ChatClosedResponse {}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollectiveChatClosedRequest {
     #[prost(string, tag = "1")]
-    pub user_id: std::string::String,
+    pub user_id: ::prost::alloc::string::String,
     #[prost(bool, tag = "2")]
     pub is_closed: bool,
 }
@@ -144,7 +144,7 @@ pub struct CollectiveChatClosedResponse {}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AdminStatusRequest {
     #[prost(string, tag = "1")]
-    pub user_id: std::string::String,
+    pub user_id: ::prost::alloc::string::String,
     #[prost(bool, tag = "2")]
     pub is_admin_on: bool,
 }
@@ -156,7 +156,7 @@ pub struct AdminStatusResponse {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PeerClosedRequest {
     #[prost(string, tag = "1")]
-    pub user_id: std::string::String,
+    pub user_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PeerClosedResponse {
@@ -166,60 +166,60 @@ pub struct PeerClosedResponse {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BlockUserInCollectiveChatRequest {
     #[prost(string, tag = "1")]
-    pub admin_id: std::string::String,
+    pub admin_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub blocked_user_id: std::string::String,
+    pub blocked_user_id: ::prost::alloc::string::String,
     /// 1h or 3h or 5h or always
     #[prost(string, tag = "3")]
-    pub blocking_time: std::string::String,
+    pub blocking_time: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BlockUserInCollectiveChatResponse {
     #[prost(int32, tag = "1")]
     pub response_code: i32,
     #[prost(string, tag = "2")]
-    pub blocking_time: std::string::String,
+    pub blocking_time: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
-    pub admin_id: std::string::String,
+    pub admin_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ClearCollectiveChatRequest {
     #[prost(string, tag = "1")]
-    pub admin_id: std::string::String,
+    pub admin_id: ::prost::alloc::string::String,
     #[prost(bool, tag = "2")]
     pub clear_chat: bool,
     #[prost(string, tag = "3")]
-    pub user_id: std::string::String,
+    pub user_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ClearCollectiveChatResponse {}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BlockUserInPersonalChatRequest {
     #[prost(string, tag = "1")]
-    pub user_id: std::string::String,
+    pub user_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub blocked_user_id: std::string::String,
+    pub blocked_user_id: ::prost::alloc::string::String,
     /// 1h or 3h or 5h or always
     #[prost(string, tag = "3")]
-    pub blocking_time: std::string::String,
+    pub blocking_time: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BlockUserInPersonalChatResponse {
     #[prost(int32, tag = "1")]
     pub response_code: i32,
     #[prost(string, tag = "2")]
-    pub blocking_time: std::string::String,
+    pub blocking_time: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
-    pub user_id: std::string::String,
+    pub user_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ClearPersonalChatRequest {
     #[prost(string, tag = "1")]
-    pub user_id: std::string::String,
+    pub user_id: ::prost::alloc::string::String,
     #[prost(bool, tag = "2")]
     pub clear_chat: bool,
     #[prost(string, tag = "3")]
-    pub admin_id: std::string::String,
+    pub admin_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ClearPersonalChatResponse {
@@ -229,43 +229,43 @@ pub struct ClearPersonalChatResponse {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ReportUserRequest {
     #[prost(string, tag = "1")]
-    pub user_id: std::string::String,
+    pub user_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub reported_user_id: std::string::String,
+    pub reported_user_id: ::prost::alloc::string::String,
     #[prost(bool, tag = "3")]
     pub report_user: bool,
     #[prost(string, tag = "4")]
-    pub message: std::string::String,
+    pub message: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ReportUserResponse {}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UploadImageRequest {
     #[prost(string, tag = "1")]
-    pub user_id: std::string::String,
-    #[prost(bytes, tag = "2")]
-    pub file_chunk: std::vec::Vec<u8>,
+    pub user_id: ::prost::alloc::string::String,
+    #[prost(bytes = "vec", tag = "2")]
+    pub file_chunk: ::prost::alloc::vec::Vec<u8>,
     #[prost(string, tag = "3")]
-    pub image_name: std::string::String,
+    pub image_name: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UploadImageResponse {}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DownloadImageRequest {
     #[prost(string, tag = "1")]
-    pub user_id: std::string::String,
+    pub user_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DownloadImageResponse {
     #[prost(int32, tag = "1")]
     pub response_code: i32,
-    #[prost(bytes, tag = "2")]
-    pub file_chunk: std::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "2")]
+    pub file_chunk: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RemoveImageRequest {
     #[prost(string, tag = "1")]
-    pub user_id: std::string::String,
+    pub user_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RemoveImageResponse {
@@ -308,7 +308,8 @@ pub mod chat_client {
         pub async fn new_peer(
             &mut self,
             request: impl tonic::IntoRequest<super::NewPeerRequest>,
-        ) -> Result<tonic::Response<super::NewPeerResponse>, tonic::Status> {
+        ) -> Result<tonic::Response<tonic::codec::Streaming<super::NewPeerResponse>>, tonic::Status>
+        {
             self.inner.ready().await.map_err(|e| {
                 tonic::Status::new(
                     tonic::Code::Unknown,
@@ -317,12 +318,17 @@ pub mod chat_client {
             })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static("/chatservice.Chat/NewPeer");
-            self.inner.unary(request.into_request(), path, codec).await
+            self.inner
+                .server_streaming(request.into_request(), path, codec)
+                .await
         }
         pub async fn searching_peer(
             &mut self,
             request: impl tonic::IntoRequest<super::SearchingPeerRequest>,
-        ) -> Result<tonic::Response<super::SearchingPeerResponse>, tonic::Status> {
+        ) -> Result<
+            tonic::Response<tonic::codec::Streaming<super::SearchingPeerResponse>>,
+            tonic::Status,
+        > {
             self.inner.ready().await.map_err(|e| {
                 tonic::Status::new(
                     tonic::Code::Unknown,
@@ -331,12 +337,31 @@ pub mod chat_client {
             })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static("/chatservice.Chat/SearchingPeer");
+            self.inner
+                .server_streaming(request.into_request(), path, codec)
+                .await
+        }
+        pub async fn new_coordinates(
+            &mut self,
+            request: impl tonic::IntoRequest<super::NewCoordinatesRequest>,
+        ) -> Result<tonic::Response<super::NewCoordinatesResponse>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static("/chatservice.Chat/NewCoordinates");
             self.inner.unary(request.into_request(), path, codec).await
         }
         pub async fn new_message(
             &mut self,
             request: impl tonic::IntoRequest<super::NewMessageRequest>,
-        ) -> Result<tonic::Response<super::NewMessageResponse>, tonic::Status> {
+        ) -> Result<
+            tonic::Response<tonic::codec::Streaming<super::NewMessageResponse>>,
+            tonic::Status,
+        > {
             self.inner.ready().await.map_err(|e| {
                 tonic::Status::new(
                     tonic::Code::Unknown,
@@ -345,6 +370,256 @@ pub mod chat_client {
             })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static("/chatservice.Chat/NewMessage");
+            self.inner
+                .server_streaming(request.into_request(), path, codec)
+                .await
+        }
+        pub async fn new_collective_message(
+            &mut self,
+            request: impl tonic::IntoRequest<super::NewCollectiveMessageRequest>,
+        ) -> Result<
+            tonic::Response<tonic::codec::Streaming<super::NewCollectiveMessageResponse>>,
+            tonic::Status,
+        > {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path =
+                http::uri::PathAndQuery::from_static("/chatservice.Chat/NewCollectiveMessage");
+            self.inner
+                .server_streaming(request.into_request(), path, codec)
+                .await
+        }
+        pub async fn typing_message(
+            &mut self,
+            request: impl tonic::IntoRequest<super::TypingMessageRequest>,
+        ) -> Result<
+            tonic::Response<tonic::codec::Streaming<super::TypingMessageResponse>>,
+            tonic::Status,
+        > {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static("/chatservice.Chat/TypingMessage");
+            self.inner
+                .server_streaming(request.into_request(), path, codec)
+                .await
+        }
+        pub async fn chat_closed(
+            &mut self,
+            request: impl tonic::IntoRequest<super::ChatClosedRequest>,
+        ) -> Result<
+            tonic::Response<tonic::codec::Streaming<super::ChatClosedResponse>>,
+            tonic::Status,
+        > {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static("/chatservice.Chat/ChatClosed");
+            self.inner
+                .server_streaming(request.into_request(), path, codec)
+                .await
+        }
+        pub async fn collective_chat_closed(
+            &mut self,
+            request: impl tonic::IntoRequest<super::CollectiveChatClosedRequest>,
+        ) -> Result<
+            tonic::Response<tonic::codec::Streaming<super::CollectiveChatClosedResponse>>,
+            tonic::Status,
+        > {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path =
+                http::uri::PathAndQuery::from_static("/chatservice.Chat/CollectiveChatClosed");
+            self.inner
+                .server_streaming(request.into_request(), path, codec)
+                .await
+        }
+        pub async fn peer_closed(
+            &mut self,
+            request: impl tonic::IntoRequest<super::PeerClosedRequest>,
+        ) -> Result<tonic::Response<super::PeerClosedResponse>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static("/chatservice.Chat/PeerClosed");
+            self.inner.unary(request.into_request(), path, codec).await
+        }
+        pub async fn admin_status(
+            &mut self,
+            request: impl tonic::IntoRequest<super::AdminStatusRequest>,
+        ) -> Result<tonic::Response<super::AdminStatusResponse>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static("/chatservice.Chat/AdminStatus");
+            self.inner.unary(request.into_request(), path, codec).await
+        }
+        pub async fn block_user_in_collective_chat(
+            &mut self,
+            request: impl tonic::IntoRequest<super::BlockUserInCollectiveChatRequest>,
+        ) -> Result<
+            tonic::Response<tonic::codec::Streaming<super::BlockUserInCollectiveChatResponse>>,
+            tonic::Status,
+        > {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path =
+                http::uri::PathAndQuery::from_static("/chatservice.Chat/BlockUserInCollectiveChat");
+            self.inner
+                .server_streaming(request.into_request(), path, codec)
+                .await
+        }
+        pub async fn clear_collective_chat(
+            &mut self,
+            request: impl tonic::IntoRequest<super::ClearCollectiveChatRequest>,
+        ) -> Result<
+            tonic::Response<tonic::codec::Streaming<super::ClearCollectiveChatResponse>>,
+            tonic::Status,
+        > {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path =
+                http::uri::PathAndQuery::from_static("/chatservice.Chat/ClearCollectiveChat");
+            self.inner
+                .server_streaming(request.into_request(), path, codec)
+                .await
+        }
+        pub async fn block_user_in_personal_chat(
+            &mut self,
+            request: impl tonic::IntoRequest<super::BlockUserInPersonalChatRequest>,
+        ) -> Result<
+            tonic::Response<tonic::codec::Streaming<super::BlockUserInPersonalChatResponse>>,
+            tonic::Status,
+        > {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path =
+                http::uri::PathAndQuery::from_static("/chatservice.Chat/BlockUserInPersonalChat");
+            self.inner
+                .server_streaming(request.into_request(), path, codec)
+                .await
+        }
+        pub async fn clear_personal_chat(
+            &mut self,
+            request: impl tonic::IntoRequest<super::ClearPersonalChatRequest>,
+        ) -> Result<
+            tonic::Response<tonic::codec::Streaming<super::ClearPersonalChatResponse>>,
+            tonic::Status,
+        > {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static("/chatservice.Chat/ClearPersonalChat");
+            self.inner
+                .server_streaming(request.into_request(), path, codec)
+                .await
+        }
+        pub async fn report_user(
+            &mut self,
+            request: impl tonic::IntoRequest<super::ReportUserRequest>,
+        ) -> Result<tonic::Response<super::ReportUserResponse>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static("/chatservice.Chat/ReportUser");
+            self.inner.unary(request.into_request(), path, codec).await
+        }
+        pub async fn upload_image(
+            &mut self,
+            request: impl tonic::IntoStreamingRequest<Message = super::UploadImageRequest>,
+        ) -> Result<tonic::Response<super::UploadImageResponse>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static("/chatservice.Chat/UploadImage");
+            self.inner
+                .client_streaming(request.into_streaming_request(), path, codec)
+                .await
+        }
+        pub async fn download_image(
+            &mut self,
+            request: impl tonic::IntoRequest<super::DownloadImageRequest>,
+        ) -> Result<
+            tonic::Response<tonic::codec::Streaming<super::DownloadImageResponse>>,
+            tonic::Status,
+        > {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static("/chatservice.Chat/DownloadImage");
+            self.inner
+                .server_streaming(request.into_request(), path, codec)
+                .await
+        }
+        pub async fn remove_image(
+            &mut self,
+            request: impl tonic::IntoRequest<super::RemoveImageRequest>,
+        ) -> Result<tonic::Response<super::RemoveImageResponse>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static("/chatservice.Chat/RemoveImage");
             self.inner.unary(request.into_request(), path, codec).await
         }
     }
@@ -427,6 +702,7 @@ pub mod chat_server {
             &mut self,
             request: tonic::Request<super::ChatClosedRequest>,
         ) -> Result<tonic::Response<Self::ChatClosedStream>, tonic::Status>;
+        #[doc = "Server streaming response type for the CollectiveChatClosed method."]
         type CollectiveChatClosedStream: Stream<Item = Result<super::CollectiveChatClosedResponse, tonic::Status>>
             + Send
             + Sync
@@ -479,7 +755,6 @@ pub mod chat_server {
             &mut self,
             request: tonic::Request<super::ClearPersonalChatRequest>,
         ) -> Result<tonic::Response<Self::ClearPersonalChatStream>, tonic::Status>;
-        #[doc = "Server response type for the ReportUserInProfileChat method."]
         async fn report_user(
             &self,
             request: tonic::Request<super::ReportUserRequest>,
@@ -503,7 +778,6 @@ pub mod chat_server {
         ) -> Result<tonic::Response<super::RemoveImageResponse>, tonic::Status>;
     }
     #[derive(Debug)]
-    #[doc(hidden)]
     pub struct ChatServer<T: Chat> {
         inner: _Inner<T>,
     }
@@ -548,7 +822,8 @@ pub mod chat_server {
                             request: tonic::Request<super::NewPeerRequest>,
                         ) -> Self::Future {
                             let inner = self.0.clone();
-                            let fut = async move {
+                            let fut = async move { 
+                                //(*inner).new_peer(request).await
                                 let mut tmp_inner = inner.lock().await;
                                 tmp_inner.new_peer(request).await
                             };
@@ -574,17 +849,20 @@ pub mod chat_server {
                 "/chatservice.Chat/SearchingPeer" => {
                     #[allow(non_camel_case_types)]
                     struct SearchingPeerSvc<T: Chat>(pub Arc<Mutex<T>>);
-                    impl<T: Chat> tonic::server::ServerStreamingService<super::SearchingPeerRequest> for SearchingPeerSvc<T>
+                    impl<T: Chat> tonic::server::ServerStreamingService<super::SearchingPeerRequest>
+                        for SearchingPeerSvc<T>
                     {
                         type Response = super::SearchingPeerResponse;
                         type ResponseStream = T::SearchingPeerStream;
-                        type Future = BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
+                        type Future =
+                            BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::SearchingPeerRequest>,
                         ) -> Self::Future {
                             let inner = self.0.clone();
                             let fut = async move {
+                                //(*inner).searching_peer(request).await
                                 let mut tmp_inner = inner.lock().await;
                                 tmp_inner.searching_peer(request).await
                             };
@@ -593,7 +871,7 @@ pub mod chat_server {
                     }
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let interceptor = inner.1.clone();
+                        let interceptor = inner.1;
                         let inner = inner.0;
                         let method = SearchingPeerSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
@@ -618,7 +896,8 @@ pub mod chat_server {
                             request: tonic::Request<super::NewCoordinatesRequest>,
                         ) -> Self::Future {
                             let inner = self.0.clone();
-                            let fut = async move { 
+                            let fut = async move {
+                                //(*inner).new_coordinates(request).await
                                 let mut tmp_inner = inner.lock().await;
                                 tmp_inner.new_coordinates(request).await
                             };
@@ -647,22 +926,24 @@ pub mod chat_server {
                     impl<T: Chat> tonic::server::ServerStreamingService<super::NewMessageRequest> for NewMessageSvc<T> {
                         type Response = super::NewMessageResponse;
                         type ResponseStream = T::NewMessageStream;
-                        type Future = BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
+                        type Future =
+                            BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::NewMessageRequest>,
                         ) -> Self::Future {
                             let inner = self.0.clone();
-                            let fut = async move { 
+                            let fut = async move {
+                                //(*inner).new_message(request).await
                                 let mut tmp_inner = inner.lock().await;
                                 tmp_inner.new_message(request).await
-                             };
+                            };
                             Box::pin(fut)
                         }
                     }
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let interceptor = inner.1.clone();
+                        let interceptor = inner.1;
                         let inner = inner.0;
                         let method = NewMessageSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
@@ -692,10 +973,11 @@ pub mod chat_server {
                             request: tonic::Request<super::NewCollectiveMessageRequest>,
                         ) -> Self::Future {
                             let inner = self.0.clone();
-                            let fut = async move { 
+                            let fut = async move {
+                                //(*inner).new_collective_message(request).await
                                 let mut tmp_inner = inner.lock().await;
                                 tmp_inner.new_collective_message(request).await
-                             };
+                            };
                             Box::pin(fut)
                         }
                     }
@@ -730,7 +1012,8 @@ pub mod chat_server {
                             request: tonic::Request<super::TypingMessageRequest>,
                         ) -> Self::Future {
                             let inner = self.0.clone();
-                            let fut = async move { 
+                            let fut = async move {
+                                //(*inner).typing_message(request).await
                                 let mut tmp_inner = inner.lock().await;
                                 tmp_inner.typing_message(request).await
                             };
@@ -766,7 +1049,8 @@ pub mod chat_server {
                             request: tonic::Request<super::ChatClosedRequest>,
                         ) -> Self::Future {
                             let inner = self.0.clone();
-                            let fut = async move { 
+                            let fut = async move {
+                                //(*inner).chat_closed(request).await
                                 let mut tmp_inner = inner.lock().await;
                                 tmp_inner.chat_closed(request).await
                             };
@@ -805,10 +1089,11 @@ pub mod chat_server {
                             request: tonic::Request<super::CollectiveChatClosedRequest>,
                         ) -> Self::Future {
                             let inner = self.0.clone();
-                            let fut = async move { 
+                            let fut = async move {
+                                //(*inner).collective_chat_closed(request).await
                                 let mut tmp_inner = inner.lock().await;
                                 tmp_inner.collective_chat_closed(request).await
-                             };
+                            };
                             Box::pin(fut)
                         }
                     }
@@ -840,9 +1125,10 @@ pub mod chat_server {
                         ) -> Self::Future {
                             let inner = self.0.clone();
                             let fut = async move { 
+                                //(*inner).peer_closed(request).await
                                 let mut tmp_inner = inner.lock().await;
                                 tmp_inner.peer_closed(request).await
-                             };
+                            };
                             Box::pin(fut)
                         }
                     }
@@ -874,6 +1160,7 @@ pub mod chat_server {
                         ) -> Self::Future {
                             let inner = self.0.clone();
                             let fut = async move { 
+                                //(*inner).admin_status(request).await
                                 let mut tmp_inner = inner.lock().await;
                                 tmp_inner.admin_status(request).await
                             };
@@ -913,11 +1200,11 @@ pub mod chat_server {
                             request: tonic::Request<super::BlockUserInCollectiveChatRequest>,
                         ) -> Self::Future {
                             let inner = self.0.clone();
-                            let fut =
-                                async move {
-                                    let mut tmp_inner = inner.lock().await;
-                                    tmp_inner.block_user_in_collective_chat(request).await
-                                };
+                            let fut = async move {
+                                //(*inner).block_user_in_collective_chat(request).await
+                                let mut tmp_inner = inner.lock().await;
+                                tmp_inner.block_user_in_collective_chat(request).await
+                            };
                             Box::pin(fut)
                         }
                     }
@@ -954,6 +1241,7 @@ pub mod chat_server {
                         ) -> Self::Future {
                             let inner = self.0.clone();
                             let fut = async move { 
+                                //(*inner).clear_collective_chat(request).await 
                                 let mut tmp_inner = inner.lock().await;
                                 tmp_inner.clear_collective_chat(request).await
                             };
@@ -994,6 +1282,7 @@ pub mod chat_server {
                             let inner = self.0.clone();
                             let fut =
                                 async move { 
+                                    //(*inner).block_user_in_personal_chat(request).await 
                                     let mut tmp_inner = inner.lock().await;
                                     tmp_inner.block_user_in_personal_chat(request).await
                                 };
@@ -1032,7 +1321,8 @@ pub mod chat_server {
                             request: tonic::Request<super::ClearPersonalChatRequest>,
                         ) -> Self::Future {
                             let inner = self.0.clone();
-                            let fut = async move {
+                            let fut = async move { 
+                                //(*inner).clear_personal_chat(request).await 
                                 let mut tmp_inner = inner.lock().await;
                                 tmp_inner.clear_personal_chat(request).await
                             };
@@ -1066,7 +1356,8 @@ pub mod chat_server {
                             request: tonic::Request<super::ReportUserRequest>,
                         ) -> Self::Future {
                             let inner = self.0.clone();
-                            let fut = async move {
+                            let fut = async move { 
+                                //(*inner).report_user(request).await 
                                 let mut tmp_inner = inner.lock().await;
                                 tmp_inner.report_user(request).await
                             };
@@ -1102,7 +1393,8 @@ pub mod chat_server {
                             request: tonic::Request<tonic::Streaming<super::UploadImageRequest>>,
                         ) -> Self::Future {
                             let inner = self.0.clone();
-                            let fut = async move {
+                            let fut = async move { 
+                                //(*inner).upload_image(request).await 
                                 let mut tmp_inner = inner.lock().await;
                                 tmp_inner.upload_image(request).await
                             };
@@ -1141,8 +1433,10 @@ pub mod chat_server {
                         ) -> Self::Future {
                             let inner = self.0.clone();
                             let fut = async move { 
+                                //(*inner).download_image(request).await 
                                 let mut tmp_inner = inner.lock().await;
-                                tmp_inner.download_image(request).await };
+                                tmp_inner.download_image(request).await 
+                            };
                             Box::pin(fut)
                         }
                     }
@@ -1174,6 +1468,7 @@ pub mod chat_server {
                         ) -> Self::Future {
                             let inner = self.0.clone();
                             let fut = async move { 
+                                //(*inner).remove_image(request).await 
                                 let mut tmp_inner = inner.lock().await;
                                 tmp_inner.remove_image(request).await
                             };
@@ -1200,6 +1495,7 @@ pub mod chat_server {
                     Ok(http::Response::builder()
                         .status(200)
                         .header("grpc-status", "12")
+                        .header("content-type", "application/grpc")
                         .body(tonic::body::BoxBody::empty())
                         .unwrap())
                 }),

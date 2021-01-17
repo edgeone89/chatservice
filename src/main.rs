@@ -3,11 +3,13 @@ use tonic::{transport::Server, Request, Response, Status};
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::mpsc::Receiver;
+//use tokio::stream::Stream;
+use futures::stream::Stream;
+//use tokio_stream::Stream;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tokio::stream::StreamExt;
 use std::path::Path;
 use std::fs::File;
 use std::io::Write;
@@ -108,11 +110,11 @@ pub struct DropReceiver<T> {
     hab_chat: Arc<std::sync::Mutex<&'static mut HABChat>>
 }
 
-impl<T> tokio::stream::Stream for DropReceiver<T> {
+impl<T> Stream for DropReceiver<T> {
     type Item = T;
     
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        Pin::new(&mut self.rx).poll_next(cx)
+        Pin::new(&mut self.rx).poll_recv(cx)
     }
 }
 impl<T> Deref for DropReceiver<T> {
@@ -216,6 +218,17 @@ impl<T> Drop for DropReceiver<T> {
     }
 }
 
+struct StreamReceiver<T>{
+    rx: Receiver<T>
+}
+impl<T> Stream for StreamReceiver<T> {
+    type Item = T;
+    
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        Pin::new(&mut self.rx).poll_recv(cx)
+    }
+}
+
 fn extend_lifetime<'short_lifetime>(hab_chat_ref: &'short_lifetime mut HABChat) -> &'static mut HABChat {
     return unsafe {
         std::mem::transmute::<&'short_lifetime mut HABChat, &'static mut HABChat>(hab_chat_ref)
@@ -271,13 +284,13 @@ impl Chat for HABChat {
         return Ok(Response::new(receiver));
     }
 
-    type SearchingPeerStream=mpsc::Receiver<Result<SearchingPeerResponse,Status>>;
+    type SearchingPeerStream=StreamReceiver<Result<SearchingPeerResponse,Status>>;
     async fn searching_peer(&mut self, request: Request<SearchingPeerRequest>) -> 
     Result<Response<Self::SearchingPeerStream>, Status>
     {
         println!("Got a searching_peer request from {:?}", request.remote_addr());
         
-        let (mut tx, rx) = mpsc::channel(4);
+        let (mut tx, rx) = mpsc::channel(4000);
 
         let user_id_from_request = request.get_ref().user_id.clone();
         let user_name_from_request = request.get_ref().user_name.clone();
@@ -348,6 +361,7 @@ impl Chat for HABChat {
                     let lat2 = (*val).lat;
                     let lon2 = (*val).lng;
                     let actual_distance_between_peers = compute_distance(lat1, lon1, lat2, lon2).round() as i32;
+                    println!("between {} and {}", &user_id_from_request, key);
                     println!("actual_distance_between_peers={}",actual_distance_between_peers);
                     if actual_distance_between_peers <= (*val).visible_in_radius_in_meters
                     {
@@ -516,8 +530,10 @@ impl Chat for HABChat {
                 }
             });
         }
-        
-        return Ok(Response::new(rx));
+        let stream_receiver = StreamReceiver{
+            rx: rx
+        };
+        return Ok(Response::new(stream_receiver));
     }
 
     async fn new_coordinates(
@@ -559,6 +575,7 @@ impl Chat for HABChat {
                     if key != &user_id_from_request {
                         if value.is_searching == true {
                             let distance = compute_distance(lat_from_request, lng_from_request, value.lat, value.lng).round() as i32;
+                            println!("between {} and {}", key, &user_id_from_request);
                             println!("distance between peers:{}", &distance);
                             if value.visible_in_radius_in_meters < distance {
                                 println!("new coordinates: value.visible_in_radius_in_meters < distance");
@@ -687,7 +704,7 @@ impl Chat for HABChat {
         return Ok(Response::new(reply));
     }
 
-    type NewMessageStream=mpsc::Receiver<Result<NewMessageResponse, Status>>;
+    type NewMessageStream=StreamReceiver<Result<NewMessageResponse, Status>>;
     async fn new_message(&mut self, request: Request<NewMessageRequest>) -> 
     Result<Response<Self::NewMessageStream>, Status>
     {
@@ -793,10 +810,13 @@ impl Chat for HABChat {
                 }
             }
         }
-        return Ok(Response::new(rx));
+        let stream_receiver = StreamReceiver{
+            rx: rx
+        };
+        return Ok(Response::new(stream_receiver));
     }
     
-    type NewCollectiveMessageStream=mpsc::Receiver<Result<NewCollectiveMessageResponse, Status>>;
+    type NewCollectiveMessageStream=StreamReceiver<Result<NewCollectiveMessageResponse, Status>>;
     async fn new_collective_message(&mut self, request: Request<NewCollectiveMessageRequest>) -> 
     Result<Response<Self::NewCollectiveMessageStream>, Status>
     {
@@ -989,10 +1009,13 @@ impl Chat for HABChat {
                 }
             }
         }
-        return Ok(Response::new(rx));
+        let stream_receiver = StreamReceiver{
+            rx: rx
+        };
+        return Ok(Response::new(stream_receiver));
     }
 
-    type TypingMessageStream=mpsc::Receiver<Result<TypingMessageResponse, Status>>;
+    type TypingMessageStream=StreamReceiver<Result<TypingMessageResponse, Status>>;
     async fn typing_message(&mut self,request: Request<TypingMessageRequest>) -> 
     Result<Response<Self::TypingMessageStream>, Status>
     {
@@ -1059,10 +1082,13 @@ impl Chat for HABChat {
                 }
             //}
         }
-        return Ok(Response::new(rx));
+        let stream_receiver = StreamReceiver{
+            rx: rx
+        };
+        return Ok(Response::new(stream_receiver));
     }
 
-    type ChatClosedStream = mpsc::Receiver<Result<ChatClosedResponse, Status>>;
+    type ChatClosedStream = StreamReceiver<Result<ChatClosedResponse, Status>>;
     async fn chat_closed(&mut self, request: Request<ChatClosedRequest>) -> 
     Result<Response<Self::ChatClosedStream>, Status>
     {
@@ -1136,10 +1162,13 @@ impl Chat for HABChat {
             }*/
         }
 
-        return Ok(Response::new(rx));
+        let stream_receiver = StreamReceiver{
+            rx: rx
+        };
+        return Ok(Response::new(stream_receiver));
     }
 
-    type CollectiveChatClosedStream = mpsc::Receiver<Result<CollectiveChatClosedResponse, Status>>;
+    type CollectiveChatClosedStream = StreamReceiver<Result<CollectiveChatClosedResponse, Status>>;
     async fn collective_chat_closed(&mut self, request: Request<CollectiveChatClosedRequest>) -> 
     Result<Response<Self::CollectiveChatClosedStream>, Status>
     {
@@ -1202,7 +1231,10 @@ impl Chat for HABChat {
                 val.remove(&user_id_from_request);
             }*/
         }
-        return Ok(Response::new(rx));
+        let stream_receiver = StreamReceiver{
+            rx: rx
+        };
+        return Ok(Response::new(stream_receiver));
     }
 
     async fn peer_closed(&mut self, request: Request<PeerClosedRequest>) -> 
@@ -1313,7 +1345,7 @@ impl Chat for HABChat {
         return Ok(Response::new(reply));
     }
 
-    type BlockUserInCollectiveChatStream = mpsc::Receiver<Result<BlockUserInCollectiveChatResponse, Status>>;
+    type BlockUserInCollectiveChatStream = StreamReceiver<Result<BlockUserInCollectiveChatResponse, Status>>;
     async fn block_user_in_collective_chat(
         &mut self,
         request: Request<BlockUserInCollectiveChatRequest>,
@@ -1353,10 +1385,13 @@ impl Chat for HABChat {
             }
         }
         
-        return Ok(Response::new(rx));
+        let stream_receiver = StreamReceiver{
+            rx: rx
+        };
+        return Ok(Response::new(stream_receiver));
     }
 
-    type ClearCollectiveChatStream = mpsc::Receiver<Result<ClearCollectiveChatResponse, Status>>;
+    type ClearCollectiveChatStream = StreamReceiver<Result<ClearCollectiveChatResponse, Status>>;
     async fn clear_collective_chat(
         &mut self,
         request: Request<ClearCollectiveChatRequest>,
@@ -1398,10 +1433,13 @@ impl Chat for HABChat {
             }
         }
 
-        return Ok(Response::new(rx));
+        let stream_receiver = StreamReceiver{
+            rx: rx
+        };
+        return Ok(Response::new(stream_receiver));
     }
 
-    type BlockUserInPersonalChatStream = mpsc::Receiver<Result<BlockUserInPersonalChatResponse, Status>>;
+    type BlockUserInPersonalChatStream = StreamReceiver<Result<BlockUserInPersonalChatResponse, Status>>;
     async fn block_user_in_personal_chat(
         &mut self,
         request: Request<BlockUserInPersonalChatRequest>,
@@ -1442,10 +1480,13 @@ impl Chat for HABChat {
                 }
             }
         }
-        return Ok(Response::new(rx));
+        let stream_receiver = StreamReceiver{
+            rx: rx
+        };
+        return Ok(Response::new(stream_receiver));
     }
 
-    type ClearPersonalChatStream = mpsc::Receiver<Result<ClearPersonalChatResponse, Status>>;
+    type ClearPersonalChatStream = StreamReceiver<Result<ClearPersonalChatResponse, Status>>;
     async fn clear_personal_chat(
         &mut self,
         request: Request<ClearPersonalChatRequest>,
@@ -1494,7 +1535,10 @@ impl Chat for HABChat {
                 }
             }
         }
-        return Ok(Response::new(rx));
+        let stream_receiver = StreamReceiver{
+            rx: rx
+        };
+        return Ok(Response::new(stream_receiver));
     }
 
     async fn report_user(
@@ -1525,6 +1569,7 @@ impl Chat for HABChat {
             Ok(_) => {}
         }
 
+        use tokio_stream::StreamExt;
         if let Some(uploadImageRequestResult) = stream.next().await {
             if let Ok(uploadImageRequest) = uploadImageRequestResult {
                 let user_id_from_request = uploadImageRequest.user_id;
@@ -1572,7 +1617,7 @@ impl Chat for HABChat {
         return Ok(Response::new(reply));
     }
 
-    type DownloadImageStream = mpsc::Receiver<Result<DownloadImageResponse, tonic::Status>>;
+    type DownloadImageStream = StreamReceiver<Result<DownloadImageResponse, tonic::Status>>;
     async fn download_image(
         &self,
         request: tonic::Request<DownloadImageRequest>,
@@ -1698,7 +1743,10 @@ impl Chat for HABChat {
             println!("download_image: no connected_client");
         }
 
-        return Ok(Response::new(rx));
+        let stream_receiver = StreamReceiver{
+            rx: rx
+        };
+        return Ok(Response::new(stream_receiver));
     }
     async fn remove_image(
         &mut self,
