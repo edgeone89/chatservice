@@ -110,6 +110,15 @@ message AdminStatusResponse{
     int32 response_code = 1;
 }
 
+message GetAdminStatusRequest {
+    string user_id = 1;
+    string admin_id = 2;
+}
+
+message GetAdminStatusResponse{
+    bool is_admin_on = 1;
+}
+
 message PeerClosedRequest{
     string user_id = 1;
 }
@@ -205,14 +214,16 @@ service Chat {
     rpc SearchingPeer(SearchingPeerRequest) returns (stream SearchingPeerResponse) {}
     rpc NewCoordinates(NewCoordinatesRequest) returns(NewCoordinatesResponse) {}
     rpc NewMessage(NewMessageRequest) returns (stream NewMessageResponse) {}
-    rpc NewCollectiveMessage(NewCollectiveMessageRequest) returns (stream NewCollectiveMessageResponse) {}
+    rpc NewGroupMessage(NewCollectiveMessageRequest) returns (stream NewCollectiveMessageResponse) {}
     rpc TypingMessage(TypingMessageRequest) returns (stream TypingMessageResponse) {}
+    rpc TypingGroupMessage(TypingMessageRequest) returns (stream TypingMessageResponse) {}
     rpc ChatClosed(ChatClosedRequest) returns(stream ChatClosedResponse){}
-    rpc CollectiveChatClosed(CollectiveChatClosedRequest) returns(stream CollectiveChatClosedResponse){}
+    rpc GroupChatClosed(CollectiveChatClosedRequest) returns(stream CollectiveChatClosedResponse){}
     rpc PeerClosed (PeerClosedRequest) returns (PeerClosedResponse) {}
     rpc AdminStatus(AdminStatusRequest)returns (AdminStatusResponse){}
-    rpc BlockUserInCollectiveChat(BlockUserInCollectiveChatRequest) returns (stream BlockUserInCollectiveChatResponse) {}
-    rpc ClearCollectiveChat(ClearCollectiveChatRequest) returns (stream ClearCollectiveChatResponse) {}
+    rpc GetAdminStatus(GetAdminStatusRequest) returns (stream GetAdminStatusResponse) {}
+    rpc BlockUserInGroupChat(BlockUserInCollectiveChatRequest) returns (stream BlockUserInCollectiveChatResponse) {}
+    rpc ClearGroupChat(ClearCollectiveChatRequest) returns (stream ClearCollectiveChatResponse) {}
     rpc BlockUserInPersonalChat(BlockUserInPersonalChatRequest) returns(stream BlockUserInPersonalChatResponse) {}
     rpc ClearPersonalChat(ClearPersonalChatRequest) returns(stream ClearPersonalChatResponse) {}
     rpc ReportUser(ReportUserRequest) returns(ReportUserResponse){}
