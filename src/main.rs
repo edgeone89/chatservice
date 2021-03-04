@@ -3,9 +3,7 @@ use tonic::{transport::Server, Request, Response, Status};
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::mpsc::Receiver;
-//use tokio_stream::wrappers::ReceiverStream;
 use futures_core::stream::Stream;
-//use tokio_stream::Stream;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -62,7 +60,7 @@ struct ConnectedClient {
     sender_typing_message: Option<Sender<Result<TypingMessageResponse, Status>>>,
     sender_typing_group_message: Option<Sender<Result<TypingMessageResponse, Status>>>,
     sender_personal_chat_message: Option<Sender<Result<NewMessageResponse, Status>>>,
-    sender_collective_chat_message: Option<Sender<Result<NewCollectiveMessageResponse, Status>>>,
+    sender_group_chat_message: Option<Sender<Result<NewCollectiveMessageResponse, Status>>>,
     sender_get_admin_status: Option<Sender<Result<GetAdminStatusResponse, Status>>>,
     image_name: Option<String>
 }
@@ -131,7 +129,6 @@ impl<T> Stream for DropReceiver<T> {
 impl<T> Drop for DropReceiver<T> {
     fn drop(&mut self) {
         println!("RECEIVER {} has been DROPPED", &self.user_id);
-        
         if let Ok(hab_chat) = &mut self.hab_chat.lock() {
             use futures_executor::block_on;
             let user_id = self.user_id.clone();
@@ -145,11 +142,6 @@ impl<T> Drop for DropReceiver<T> {
             });
                 
             block_on(async {
-                let searching_peers = &mut (*(hab_chat.searching_peers.write().await));
-                searching_peers.remove(&user_id);
-            });
-                
-            block_on(async {
                 let connected_peer_to_peer = &mut (*(hab_chat.connected_peer_to_peer.write().await));
                 if let Some(another_peer) = connected_peer_to_peer.get(&user_id){
                     let connected_clients = &(*(hab_chat.connected_clients.read().await));
@@ -158,8 +150,8 @@ impl<T> Drop for DropReceiver<T> {
                             let reply = ChatClosedResponse{};
                             tokio::spawn(async move {
                                 let res = tx_tmp.send(Ok(reply)).await;
-                                if let Ok(_) = res {
-                                    //println!("sent a chat_closed ");
+                                if let Err(err) = res {
+                                    println!("Drop: chat_closed error: {}", err);
                                 }
                             });
                         }
@@ -182,8 +174,8 @@ impl<T> Drop for DropReceiver<T> {
                                     let reply = CollectiveChatClosedResponse{};
                                     tokio::spawn(async move {
                                         let res = tx_tmp.send(Ok(reply)).await;
-                                        if let Ok(_) = res {
-                                            //println!("sent a collective_chat_closed ");
+                                        if let Err(err) = res {
+                                            println!("Drop: collective_chat_closed: {}", err);
                                         }
                                     });
                                 }
@@ -222,6 +214,11 @@ impl<T> Drop for DropReceiver<T> {
                         //});
                     }
                 }
+            });
+                
+            block_on(async {
+                let searching_peers = &mut (*(hab_chat.searching_peers.write().await));
+                searching_peers.remove(&user_id);
             });
         }
         
@@ -276,7 +273,7 @@ impl Chat for HABChat {
                 sender_typing_message: Option::None,
                 sender_typing_group_message: Option::None,
                 sender_personal_chat_message: Option::None,
-                sender_collective_chat_message: Option::None,
+                sender_group_chat_message: Option::None,
                 sender_get_admin_status: Option::None,
                 image_name: Option::None
             };
@@ -905,21 +902,18 @@ impl Chat for HABChat {
         let user_name_from_request = request.get_ref().user_name.clone();
         let is_admin_from_request = request.get_ref().is_admin;
 
-        if user_id_from_request != "" {
-            //self.collective_chat_message_senders.entry(user_id_from_request.clone()).or_insert(tx.clone());
+        if is_admin_from_request == false {
             let connected_clients = &mut(*(self.connected_clients.write().await));
             if let Some(connected_client) = connected_clients.get_mut(&user_id_from_request) {
-                if connected_client.sender_collective_chat_message.is_some() != true {
-                    connected_client.sender_collective_chat_message = Some(tx.clone());
+                if connected_client.sender_group_chat_message.is_some() != true {
+                    connected_client.sender_group_chat_message = Some(tx.clone());
                 }
             }
-        }
-        if admin_id_from_request != "" {
-            //self.collective_chat_message_senders.entry(admin_id_from_request.clone()).or_insert(tx.clone());
+        } else {
             let connected_clients = &mut(*(self.connected_clients.write().await));
             if let Some(connected_client) = connected_clients.get_mut(&admin_id_from_request) {
-                if connected_client.sender_collective_chat_message.is_some() != true {
-                    connected_client.sender_collective_chat_message = Some(tx.clone());
+                if connected_client.sender_group_chat_message.is_some() != true {
+                    connected_client.sender_group_chat_message = Some(tx.clone());
                 }
             }
         }
@@ -930,7 +924,7 @@ impl Chat for HABChat {
                     let connected_clients = &(*(self.connected_clients.read().await));
                     if connected_clients.contains_key(&admin_id_from_request) == true {
                         if let Some(connected_client) = connected_clients.get(&admin_id_from_request) {
-                            if let Some(tx_tmp_ref) = &connected_client.sender_collective_chat_message {
+                            if let Some(tx_tmp_ref) = &connected_client.sender_group_chat_message {
                                 let tx_tmp = (*tx_tmp_ref).clone();
                                 if connected_client.is_admin_on == false {
                                     let reply = chatservice::NewCollectiveMessageResponse {
@@ -968,7 +962,7 @@ impl Chat for HABChat {
                     let connected_clients = &(*(self.connected_clients.read().await));
                     if connected_clients.contains_key(&user_id_from_request) == true {
                         if let Some(connected_client) = connected_clients.get(&admin_id_from_request) {
-                            if let Some(tx_tmp_ref) = &connected_client.sender_collective_chat_message {
+                            if let Some(tx_tmp_ref) = &connected_client.sender_group_chat_message {
                                 let tx_tmp = (*tx_tmp_ref).clone();
                                 if connected_client.is_admin_on == false {
                                     let reply = chatservice::NewCollectiveMessageResponse {
@@ -1013,7 +1007,7 @@ impl Chat for HABChat {
                                 if let Some(peers) = connected_peer_to_peers.get(&admin_id_from_request) {
                                     for peer in peers {
                                         if let Some(connected_peer) = connected_clients.get(peer) {
-                                            if let Some(tx_tmp_ref) = &connected_peer.sender_collective_chat_message {
+                                            if let Some(tx_tmp_ref) = &connected_peer.sender_group_chat_message {
                                         
                                                 let tx_tmp = (*tx_tmp_ref).clone();
                                                 let reply = chatservice::NewCollectiveMessageResponse {
@@ -1036,7 +1030,7 @@ impl Chat for HABChat {
                                 }
                             } else {
                                 if let Some(connected_client) = connected_clients.get(&user_id_from_request) {
-                                    if let Some(tx_tmp_ref) = &connected_client.sender_collective_chat_message {
+                                    if let Some(tx_tmp_ref) = &connected_client.sender_group_chat_message {
                                         let tx_tmp = (*tx_tmp_ref).clone();
                                         let reply = chatservice::NewCollectiveMessageResponse {
                                             response_code: -1,
@@ -1064,7 +1058,7 @@ impl Chat for HABChat {
                     for peer in peers {
                         if peer != &user_id_from_request {
                             if let Some(connected_client) = connected_clients.get(peer) {
-                                if let Some(tx_tmp_ref) = &connected_client.sender_collective_chat_message {
+                                if let Some(tx_tmp_ref) = &connected_client.sender_group_chat_message {
                                     let tx_tmp = (*tx_tmp_ref).clone();
                                     let reply = chatservice::NewCollectiveMessageResponse {
                                         response_code: 1,
@@ -1085,7 +1079,7 @@ impl Chat for HABChat {
                 }
                 if connected_clients.contains_key(&admin_id_from_request) == true {
                     if let Some(connected_client) = connected_clients.get(&admin_id_from_request) {
-                        if let Some(tx_tmp_ref) = &connected_client.sender_collective_chat_message {
+                        if let Some(tx_tmp_ref) = &connected_client.sender_group_chat_message {
                             let tx_tmp = (*tx_tmp_ref).clone();
                     
                             let reply = chatservice::NewCollectiveMessageResponse {
@@ -1132,12 +1126,15 @@ impl Chat for HABChat {
         if &user_id2_from_request != "" {
             let connected_peer_to_peer = &(*(self.connected_peer_to_peer.read().await));
             if connected_peer_to_peer.contains_key(&user_id2_from_request) {
+                //println!("if connected_peer_to_peer.contains_key(&user_id2_from_request) ");
                 if let Some(another_peer) = connected_peer_to_peer.get(&user_id2_from_request) {
+                    //println!("if let Some(another_peer) = connected_peer_to_peer.get(&user_id2_from_request) ");
                     if another_peer == &user_id_from_request {
-                        //if self.typing_message_senders.contains_key(&user_id2_from_request) == true {
+                        //println!("if another_peer == &user_id_from_request ");
                         let connected_clients = &(*(self.connected_clients.read().await));
                         if let Some(connected_client) = connected_clients.get(&user_id2_from_request) {
                             if let Some(typing_message_sender) = &connected_client.sender_typing_message {
+                                //println!("if let Some(typing_message_sender) = &connected_client.sender_typing_message");
                                 let tx_tmp = typing_message_sender.clone();
                                 let reply = chatservice::TypingMessageResponse {
                                     response_code: 1,
@@ -1328,7 +1325,7 @@ impl Chat for HABChat {
                 connected_client.sender_collective_chat_closed_clients = Option::None;
                 connected_client.sender_clear_collective_chat = Option::None;
                 connected_client.sender_typing_group_message = Option::None;
-                connected_client.sender_collective_chat_message = Option::None;
+                connected_client.sender_group_chat_message = Option::None;
             }
             
             //self.collective_chat_closed_clients.remove(user_id2);
@@ -1364,7 +1361,27 @@ impl Chat for HABChat {
         }
 
         {
-            let connected_peer_to_peers = &mut(*(self.connected_peer_to_peers.write().await));
+            let connected_peer_to_peers = &mut (*(self.connected_peer_to_peers.write().await));
+            let peers_opt = connected_peer_to_peers.get(&user_id_from_request);
+            if let Some(peers) = peers_opt{
+                let connected_clients = &(*(self.connected_clients.read().await));
+                for user_id2 in peers {
+                    if connected_clients.contains_key(user_id2) == true {
+                        if let Some(connected_client) = connected_clients.get(user_id2){
+                            if let Some(tx_tmp) = connected_client.sender_collective_chat_closed_clients.clone() {
+                                let reply = CollectiveChatClosedResponse{};
+                                tokio::spawn(async move {
+                                    let res = tx_tmp.send(Ok(reply)).await;
+                                    if let Err(err) = res {
+                                        println!("peer_closed: collective_chat_closed: {}", err);
+                                    }
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            
             connected_peer_to_peers.remove(&user_id_from_request);
             for (_, val) in connected_peer_to_peers {
                 val.remove(&user_id_from_request);
@@ -1385,17 +1402,11 @@ impl Chat for HABChat {
                 connected_client.sender_chat_closed_clients = Option::None;
                 connected_client.sender_typing_message = Option::None;
                 connected_client.sender_personal_chat_message = Option::None;
-                connected_client.sender_collective_chat_message = Option::None;
+                connected_client.sender_group_chat_message = Option::None;
             }
         }
 
         // send searching peer closed response via searching_peers.tx: SearchingPeerResponse
-        {
-            let searching_peers = &mut (*(self.searching_peers.write().await));
-            if searching_peers.contains_key(&user_id_from_request) == true {
-                searching_peers.remove(&user_id_from_request);
-            }
-        }
         {
             let searching_peers = &(*(self.searching_peers.read().await));
             for (key, val) in searching_peers {
@@ -1420,6 +1431,10 @@ impl Chat for HABChat {
                     });
                 }
             }
+        }
+        {
+            let searching_peers = &mut (*(self.searching_peers.write().await));
+            searching_peers.remove(&user_id_from_request);
         }
         
         let reply = chatservice::PeerClosedResponse {
