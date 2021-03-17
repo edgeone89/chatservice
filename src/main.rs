@@ -806,10 +806,17 @@ impl Chat for HABChat {
                                     });
                                 } else {
                                     if let Ok(mut client) = PushNotificationsClient::connect(PUSH_NOTIFITCATION_SERVER_ADDRESS).await {
+                                        let searching_peers = self.searching_peers.read().await;
+                                        let searching_peer_opt = searching_peers.get(&user_id_from_request);
+                                        let mut from_user_name = "".to_string();
+                                        if let Some(searching_peer) = searching_peer_opt {
+                                            from_user_name = searching_peer.user_name.clone();
+                                        }
                                         let request = Request::new(PushNotificationRequest{
                                             user_id: user_id_from_request,
                                             message: message_from_request,
-                                            to_user_id: user_id2_from_request
+                                            to_user_id: user_id2_from_request,
+                                            from_user_name: from_user_name
                                         });
                                         if let Ok(_) = client.send_push_notification(request).await {
                                             println!("sent push notification");
@@ -821,10 +828,17 @@ impl Chat for HABChat {
                             } else {
                                 println!("if another_peer != &user_id_from_request ");
                                 if let Ok(mut client) = PushNotificationsClient::connect(PUSH_NOTIFITCATION_SERVER_ADDRESS).await {
+                                    let searching_peers = self.searching_peers.read().await;
+                                    let searching_peer_opt = searching_peers.get(&user_id_from_request);
+                                    let mut from_user_name = "".to_string();
+                                    if let Some(searching_peer) = searching_peer_opt {
+                                        from_user_name = searching_peer.user_name.clone();
+                                    }
                                     let request = Request::new(PushNotificationRequest{
                                         user_id: user_id_from_request,
                                         message: message_from_request,
-                                        to_user_id: user_id2_from_request
+                                        to_user_id: user_id2_from_request,
+                                        from_user_name: from_user_name
                                     });
                                     if let Ok(_) = client.send_push_notification(request).await {
                                         println!("sent push notification");
@@ -837,10 +851,17 @@ impl Chat for HABChat {
                     } else {
                         println!("if self.connected_peer_to_peer.contains_key(&user_id2_from_request) == false");
                         if let Ok(mut client) = PushNotificationsClient::connect(PUSH_NOTIFITCATION_SERVER_ADDRESS).await {
+                            let searching_peers = self.searching_peers.read().await;
+                            let searching_peer_opt = searching_peers.get(&user_id_from_request);
+                            let mut from_user_name = "".to_string();
+                            if let Some(searching_peer) = searching_peer_opt {
+                                from_user_name = searching_peer.user_name.clone();
+                            }
                             let request = Request::new(PushNotificationRequest{
                                 user_id: user_id_from_request,
                                 message: message_from_request,
-                                to_user_id: user_id2_from_request
+                                to_user_id: user_id2_from_request,
+                                from_user_name: from_user_name
                             });
                             let res = client.send_push_notification(request).await;
                             if let Ok(_) = res {
@@ -853,10 +874,17 @@ impl Chat for HABChat {
                 } else {
                     println!("PushNotificationsClient");
                     if let Ok(mut client) = PushNotificationsClient::connect(PUSH_NOTIFITCATION_SERVER_ADDRESS).await {
+                        let searching_peers = self.searching_peers.read().await;
+                        let searching_peer_opt = searching_peers.get(&user_id_from_request);
+                        let mut from_user_name = "".to_string();
+                        if let Some(searching_peer) = searching_peer_opt {
+                            from_user_name = searching_peer.user_name.clone();
+                        }
                         let request = Request::new(PushNotificationRequest{
                             user_id: user_id_from_request,
                             message: message_from_request,
-                            to_user_id: user_id2_from_request
+                            to_user_id: user_id2_from_request,
+                            from_user_name: from_user_name
                         });
                         let res = client.send_push_notification(request).await;
                         if let Ok(_) = res {
@@ -869,10 +897,17 @@ impl Chat for HABChat {
             } else {
                 //if connected_clients.contains_key(&user_id2_from_request) == false
                 if let Ok(mut client) = PushNotificationsClient::connect(PUSH_NOTIFITCATION_SERVER_ADDRESS).await {
+                    let searching_peers = self.searching_peers.read().await;
+                    let searching_peer_opt = searching_peers.get(&user_id_from_request);
+                    let mut from_user_name = "".to_string();
+                    if let Some(searching_peer) = searching_peer_opt {
+                        from_user_name = searching_peer.user_name.clone();
+                    }
                     let request = Request::new(PushNotificationRequest{
                         user_id: user_id_from_request,
                         message: message_from_request,
-                        to_user_id: user_id2_from_request
+                        to_user_id: user_id2_from_request,
+                        from_user_name: from_user_name
                     });
                     let res = client.send_push_notification(request).await;
                     if let Ok(_) = res {

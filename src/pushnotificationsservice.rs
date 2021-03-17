@@ -9,6 +9,8 @@ pub struct SubscribePushNotificationResponce {
     pub from_user_id: std::string::String,
     #[prost(string, tag = "2")]
     pub message: std::string::String,
+    #[prost(string, tag = "3")]
+    pub from_user_name: std::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PushNotificationRequest {
@@ -18,6 +20,8 @@ pub struct PushNotificationRequest {
     pub message: std::string::String,
     #[prost(string, tag = "3")]
     pub to_user_id: std::string::String,
+    #[prost(string, tag = "4")]
+    pub from_user_name: std::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PushNotificationResponce {
