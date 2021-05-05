@@ -25,6 +25,12 @@ const CHAT_SERVER_ADDRESS: &str = "192.168.0.100:50051";//194.87.99.104
 const PUSH_NOTIFITCATION_SERVER_ADDRESS: &str = "http://192.168.0.100:50052";//194.87.99.104
 const USER_IMAGES_DIR: &str = "user_imgs";
 
+const SEARCHING_PEER_RESPONSE_CODE_SUCCESS: i32 = 1;
+const SEARCHING_PEER_RESPONSE_CODE_NO_PEER: i32 = 2;
+const SEARCHING_PEER_RESPONSE_CODE_PEER_CLOSED: i32 = 3;
+const SEARCHING_PEER_RESPONSE_CODE_PEER_OUT_OF_RADIUS: i32 = 4;
+const SEARCHING_PEER_RESPONSE_CODE_PEER_SEARCHING_OFF: i32 = 5;
+
 mod chatservice;
 use chatservice::chat_server::{Chat, ChatServer};
 use chatservice::{NewPeerRequest, NewPeerResponse, SearchingPeerRequest, SearchingPeerResponse, 
@@ -194,7 +200,7 @@ impl<T> Drop for DropReceiver<T> {
                 for (key, val) in searching_peers {
                     if key != &user_id {
                         let reply_to_peer = chatservice::SearchingPeerResponse {
-                            response_code: 3,
+                            response_code: SEARCHING_PEER_RESPONSE_CODE_PEER_CLOSED,
                             user_id: user_id.clone(),
                             radius_distance_in_meters: 0,
                             status: "".to_string(),
@@ -410,7 +416,7 @@ impl Chat for HABChat {
                                             is_admin_on = connected_client.is_admin_on;
                                         }
                                         let reply_to_peer1 = chatservice::SearchingPeerResponse {
-                                            response_code: 1,
+                                            response_code: SEARCHING_PEER_RESPONSE_CODE_SUCCESS,
                                             user_id: peer_id,
                                             radius_distance_in_meters: peer_radius_distance_in_meters,
                                             status: peer_status,
@@ -430,23 +436,22 @@ impl Chat for HABChat {
                                         });
                                         is_found_peer = true;
                                     } else {
+                                        let peer_id: String = (*key).clone();
                                         let tx_tmp = tx.clone();
                                         tokio::spawn(async move {
-                                            for _ in 0i32..1 {
-                                                let reply = chatservice::SearchingPeerResponse {
-                                                    response_code: 2,
-                                                    user_id: "no_user_id".to_string(),
-                                                    radius_distance_in_meters: -1,
-                                                    status: "".to_string(),
-                                                    status_color_id: -1,
-                                                    user_name: "".to_string(),
-                                                    description: "".to_string(),
-                                                    is_admin_on: false
-                                                };
-                                                let res = tx_tmp.send(Ok(reply)).await;
-                                                if let Ok(_) = res {
+                                            let reply = chatservice::SearchingPeerResponse {
+                                                response_code: SEARCHING_PEER_RESPONSE_CODE_PEER_OUT_OF_RADIUS,
+                                                user_id: peer_id,
+                                                radius_distance_in_meters: -1,
+                                                status: "".to_string(),
+                                                status_color_id: -1,
+                                                user_name: "".to_string(),
+                                                description: "".to_string(),
+                                                is_admin_on: false
+                                            };
+                                            let res = tx_tmp.send(Ok(reply)).await;
+                                            if let Ok(_) = res {
 
-                                                }
                                             }
                                         });
                                     }
@@ -475,7 +480,7 @@ impl Chat for HABChat {
                                             is_admin_on = connected_client.is_admin_on;
                                         }
                                         let reply_to_peer2 = chatservice::SearchingPeerResponse {
-                                            response_code: 1,
+                                            response_code: SEARCHING_PEER_RESPONSE_CODE_SUCCESS,
                                             user_id: peer2_id,
                                             radius_distance_in_meters: peer2_radius_distance_in_meters,
                                             status: peer2_status,
@@ -495,23 +500,22 @@ impl Chat for HABChat {
                                         });
                                         is_found_peer = true;
                                     } else {
+                                        let peer2_id: String = user_id_from_request.clone();
                                         let tx_tmp = (*val).tx.clone();
                                         tokio::spawn(async move {
-                                            for _ in 0i32..1 {
-                                                let reply = chatservice::SearchingPeerResponse {
-                                                    response_code: 2,
-                                                    user_id: "no_user_id".to_string(),
-                                                    radius_distance_in_meters: -1,
-                                                    status: "".to_string(),
-                                                    status_color_id: -1,
-                                                    user_name: "".to_string(),
-                                                    description: "".to_string(),
-                                                    is_admin_on: false
-                                                };
-                                                let res = tx_tmp.send(Ok(reply)).await;
-                                                if let Ok(_) = res {
+                                            let reply = chatservice::SearchingPeerResponse {
+                                                response_code: SEARCHING_PEER_RESPONSE_CODE_PEER_OUT_OF_RADIUS,
+                                                user_id: peer2_id,
+                                                radius_distance_in_meters: -1,
+                                                status: "".to_string(),
+                                                status_color_id: -1,
+                                                user_name: "".to_string(),
+                                                description: "".to_string(),
+                                                is_admin_on: false
+                                            };
+                                            let res = tx_tmp.send(Ok(reply)).await;
+                                            if let Ok(_) = res {
 
-                                                }
                                             }
                                         });
                                     }
@@ -527,7 +531,7 @@ impl Chat for HABChat {
                 if &user_id_from_request != key {
                     let tx_tmp = (*val).tx.clone();
                     let reply = chatservice::SearchingPeerResponse {
-                        response_code: 5,
+                        response_code: SEARCHING_PEER_RESPONSE_CODE_PEER_SEARCHING_OFF,
                         user_id: user_id_from_request.clone(),
                         radius_distance_in_meters: -1,
                         status: "".to_string(),
@@ -558,7 +562,7 @@ impl Chat for HABChat {
             tokio::spawn(async move {
                 for _ in 0i32..1 {
                     let reply = chatservice::SearchingPeerResponse {
-                        response_code: 2,
+                        response_code: SEARCHING_PEER_RESPONSE_CODE_NO_PEER,
                         user_id: "no_user_id".to_string(),
                         radius_distance_in_meters: -1,
                         status: "".to_string(),
@@ -623,7 +627,7 @@ impl Chat for HABChat {
                                 //println!("new coordinates: value.visible_in_radius_in_meters < distance");
                                 let tx_tmp = (*searching_peer).tx.clone();
                                 let reply = chatservice::SearchingPeerResponse {
-                                    response_code: 4,
+                                    response_code: SEARCHING_PEER_RESPONSE_CODE_PEER_OUT_OF_RADIUS,
                                     user_id: key.to_string(),
                                     radius_distance_in_meters: -1,
                                     status: "".to_string(),
@@ -657,7 +661,7 @@ impl Chat for HABChat {
                                                     is_admin_on = connected_client.is_admin_on;
                                                 }
                                                 let reply_to_peer1 = chatservice::SearchingPeerResponse {
-                                                    response_code: 1,
+                                                    response_code: SEARCHING_PEER_RESPONSE_CODE_SUCCESS,
                                                     user_id: peer_id,
                                                     radius_distance_in_meters: peer_radius_distance_in_meters,
                                                     status: peer_status,
@@ -685,7 +689,7 @@ impl Chat for HABChat {
                                 //println!("new coordinates: searching_peer.visible_in_radius_in_meters < distance");
                                 let tx_tmp = (*value).tx.clone();
                                 let reply = chatservice::SearchingPeerResponse {
-                                    response_code: 4,
+                                    response_code: SEARCHING_PEER_RESPONSE_CODE_PEER_OUT_OF_RADIUS,
                                     user_id: user_id_from_request.to_string(),
                                     radius_distance_in_meters: -1,
                                     status: "".to_string(),
@@ -719,7 +723,7 @@ impl Chat for HABChat {
                                                     is_admin_on = connected_client.is_admin_on;
                                                 }
                                                 let reply_to_peer2 = chatservice::SearchingPeerResponse {
-                                                    response_code: 1,
+                                                    response_code: SEARCHING_PEER_RESPONSE_CODE_SUCCESS,
                                                     user_id: peer2_id,
                                                     radius_distance_in_meters: peer2_radius_distance_in_meters,
                                                     status: peer2_status,
@@ -1447,7 +1451,7 @@ impl Chat for HABChat {
             for (key, val) in searching_peers {
                 if key != &user_id_from_request {
                     let reply_to_peer = chatservice::SearchingPeerResponse {
-                        response_code: 3,
+                        response_code: SEARCHING_PEER_RESPONSE_CODE_PEER_CLOSED,
                         user_id: user_id_from_request.clone(),
                         radius_distance_in_meters: 0,
                         status: "".to_string(),

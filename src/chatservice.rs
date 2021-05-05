@@ -653,6 +653,7 @@ pub mod chat_server {
     #![allow(unused_variables, dead_code, missing_docs)]
     use tonic::codegen::*;
     use tokio::sync::Mutex;
+    use futures_core::Stream;
     #[doc = "Generated trait containing gRPC methods that should be implemented for use with ChatServer."]
     #[async_trait]
     pub trait Chat: Send + Sync + 'static {
