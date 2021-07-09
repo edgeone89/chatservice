@@ -288,6 +288,7 @@ pub struct RemoveImageResponse {
 pub mod chat_client {
     #![allow(unused_variables, dead_code, missing_docs)]
     use tonic::codegen::*;
+    #[derive(Debug, Clone)]
     pub struct ChatClient<T> {
         inner: tonic::client::Grpc<T>,
     }
@@ -305,17 +306,40 @@ pub mod chat_client {
     impl<T> ChatClient<T>
     where
         T: tonic::client::GrpcService<tonic::body::BoxBody>,
-        T::ResponseBody: Body + HttpBody + Send + 'static,
+        T::ResponseBody: Body + Send + Sync + 'static,
         T::Error: Into<StdError>,
-        <T::ResponseBody as HttpBody>::Error: Into<StdError> + Send,
+        <T::ResponseBody as Body>::Error: Into<StdError> + Send,
     {
         pub fn new(inner: T) -> Self {
             let inner = tonic::client::Grpc::new(inner);
             Self { inner }
         }
-        pub fn with_interceptor(inner: T, interceptor: impl Into<tonic::Interceptor>) -> Self {
-            let inner = tonic::client::Grpc::with_interceptor(inner, interceptor);
-            Self { inner }
+        pub fn with_interceptor<F>(inner: T, interceptor: F) -> ChatClient<InterceptedService<T, F>>
+        where
+            F: FnMut(tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status>,
+            T: Service<
+                http::Request<tonic::body::BoxBody>,
+                Response = http::Response<
+                    <T as tonic::client::GrpcService<tonic::body::BoxBody>>::ResponseBody,
+                >,
+            >,
+            <T as Service<http::Request<tonic::body::BoxBody>>>::Error:
+                Into<StdError> + Send + Sync,
+        {
+            ChatClient::new(InterceptedService::new(inner, interceptor))
+        }
+        #[doc = r" Compress requests with `gzip`."]
+        #[doc = r""]
+        #[doc = r" This requires the server to support it otherwise it might respond with an"]
+        #[doc = r" error."]
+        pub fn send_gzip(mut self) -> Self {
+            self.inner = self.inner.send_gzip();
+            self
+        }
+        #[doc = r" Enable decompressing responses with `gzip`."]
+        pub fn accept_gzip(mut self) -> Self {
+            self.inner = self.inner.accept_gzip();
+            self
         }
         pub async fn new_peer(
             &mut self,
@@ -386,7 +410,7 @@ pub mod chat_client {
                 .server_streaming(request.into_request(), path, codec)
                 .await
         }
-        pub async fn new_collective_message(
+        pub async fn new_group_message(
             &mut self,
             request: impl tonic::IntoRequest<super::NewCollectiveMessageRequest>,
         ) -> Result<
@@ -400,8 +424,7 @@ pub mod chat_client {
                 )
             })?;
             let codec = tonic::codec::ProstCodec::default();
-            let path =
-                http::uri::PathAndQuery::from_static("/chatservice.Chat/NewCollectiveMessage");
+            let path = http::uri::PathAndQuery::from_static("/chatservice.Chat/NewGroupMessage");
             self.inner
                 .server_streaming(request.into_request(), path, codec)
                 .await
@@ -425,6 +448,25 @@ pub mod chat_client {
                 .server_streaming(request.into_request(), path, codec)
                 .await
         }
+        pub async fn typing_group_message(
+            &mut self,
+            request: impl tonic::IntoRequest<super::TypingMessageRequest>,
+        ) -> Result<
+            tonic::Response<tonic::codec::Streaming<super::TypingMessageResponse>>,
+            tonic::Status,
+        > {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static("/chatservice.Chat/TypingGroupMessage");
+            self.inner
+                .server_streaming(request.into_request(), path, codec)
+                .await
+        }
         pub async fn chat_closed(
             &mut self,
             request: impl tonic::IntoRequest<super::ChatClosedRequest>,
@@ -444,7 +486,7 @@ pub mod chat_client {
                 .server_streaming(request.into_request(), path, codec)
                 .await
         }
-        pub async fn collective_chat_closed(
+        pub async fn group_chat_closed(
             &mut self,
             request: impl tonic::IntoRequest<super::CollectiveChatClosedRequest>,
         ) -> Result<
@@ -458,8 +500,7 @@ pub mod chat_client {
                 )
             })?;
             let codec = tonic::codec::ProstCodec::default();
-            let path =
-                http::uri::PathAndQuery::from_static("/chatservice.Chat/CollectiveChatClosed");
+            let path = http::uri::PathAndQuery::from_static("/chatservice.Chat/GroupChatClosed");
             self.inner
                 .server_streaming(request.into_request(), path, codec)
                 .await
@@ -492,7 +533,26 @@ pub mod chat_client {
             let path = http::uri::PathAndQuery::from_static("/chatservice.Chat/AdminStatus");
             self.inner.unary(request.into_request(), path, codec).await
         }
-        pub async fn block_user_in_collective_chat(
+        pub async fn get_admin_status(
+            &mut self,
+            request: impl tonic::IntoRequest<super::GetAdminStatusRequest>,
+        ) -> Result<
+            tonic::Response<tonic::codec::Streaming<super::GetAdminStatusResponse>>,
+            tonic::Status,
+        > {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static("/chatservice.Chat/GetAdminStatus");
+            self.inner
+                .server_streaming(request.into_request(), path, codec)
+                .await
+        }
+        pub async fn block_user_in_group_chat(
             &mut self,
             request: impl tonic::IntoRequest<super::BlockUserInCollectiveChatRequest>,
         ) -> Result<
@@ -507,12 +567,12 @@ pub mod chat_client {
             })?;
             let codec = tonic::codec::ProstCodec::default();
             let path =
-                http::uri::PathAndQuery::from_static("/chatservice.Chat/BlockUserInCollectiveChat");
+                http::uri::PathAndQuery::from_static("/chatservice.Chat/BlockUserInGroupChat");
             self.inner
                 .server_streaming(request.into_request(), path, codec)
                 .await
         }
-        pub async fn clear_collective_chat(
+        pub async fn clear_group_chat(
             &mut self,
             request: impl tonic::IntoRequest<super::ClearCollectiveChatRequest>,
         ) -> Result<
@@ -526,8 +586,7 @@ pub mod chat_client {
                 )
             })?;
             let codec = tonic::codec::ProstCodec::default();
-            let path =
-                http::uri::PathAndQuery::from_static("/chatservice.Chat/ClearCollectiveChat");
+            let path = http::uri::PathAndQuery::from_static("/chatservice.Chat/ClearGroupChat");
             self.inner
                 .server_streaming(request.into_request(), path, codec)
                 .await
@@ -588,7 +647,10 @@ pub mod chat_client {
         pub async fn upload_image(
             &mut self,
             request: impl tonic::IntoStreamingRequest<Message = super::UploadImageRequest>,
-        ) -> Result<tonic::Response<super::UploadImageResponse>, tonic::Status> {
+        ) -> Result<tonic::Response<super::UploadImageResponse>, tonic::Status>
+        where
+            T: std::fmt::Debug,
+        {
             self.inner.ready().await.map_err(|e| {
                 tonic::Status::new(
                     tonic::Code::Unknown,
@@ -635,30 +697,17 @@ pub mod chat_client {
             self.inner.unary(request.into_request(), path, codec).await
         }
     }
-    impl<T: Clone> Clone for ChatClient<T> {
-        fn clone(&self) -> Self {
-            Self {
-                inner: self.inner.clone(),
-            }
-        }
-    }
-    impl<T> std::fmt::Debug for ChatClient<T> {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "ChatClient {{ ... }}")
-        }
-    }
 }
 #[doc = r" Generated server implementations."]
 pub mod chat_server {
     #![allow(unused_variables, dead_code, missing_docs)]
     use tonic::codegen::*;
     use tokio::sync::Mutex;
-    use futures_core::Stream;
     #[doc = "Generated trait containing gRPC methods that should be implemented for use with ChatServer."]
     #[async_trait]
     pub trait Chat: Send + Sync + 'static {
         #[doc = "Server streaming response type for the NewPeer method."]
-        type NewPeerStream: Stream<Item = Result<super::NewPeerResponse, tonic::Status>>
+        type NewPeerStream: futures_core::Stream<Item = Result<super::NewPeerResponse, tonic::Status>>
             + Send
             + Sync
             + 'static;
@@ -667,7 +716,7 @@ pub mod chat_server {
             request: tonic::Request<super::NewPeerRequest>,
         ) -> Result<tonic::Response<Self::NewPeerStream>, tonic::Status>;
         #[doc = "Server streaming response type for the SearchingPeer method."]
-        type SearchingPeerStream: Stream<Item = Result<super::SearchingPeerResponse, tonic::Status>>
+        type SearchingPeerStream: futures_core::Stream<Item = Result<super::SearchingPeerResponse, tonic::Status>>
             + Send
             + Sync
             + 'static;
@@ -680,7 +729,7 @@ pub mod chat_server {
             request: tonic::Request<super::NewCoordinatesRequest>,
         ) -> Result<tonic::Response<super::NewCoordinatesResponse>, tonic::Status>;
         #[doc = "Server streaming response type for the NewMessage method."]
-        type NewMessageStream: Stream<Item = Result<super::NewMessageResponse, tonic::Status>>
+        type NewMessageStream: futures_core::Stream<Item = Result<super::NewMessageResponse, tonic::Status>>
             + Send
             + Sync
             + 'static;
@@ -688,8 +737,8 @@ pub mod chat_server {
             &mut self,
             request: tonic::Request<super::NewMessageRequest>,
         ) -> Result<tonic::Response<Self::NewMessageStream>, tonic::Status>;
-        #[doc = "Server streaming response type for the NewCollectiveMessage method."]
-        type NewGroupMessageStream: Stream<Item = Result<super::NewCollectiveMessageResponse, tonic::Status>>
+        #[doc = "Server streaming response type for the NewGroupMessage method."]
+        type NewGroupMessageStream: futures_core::Stream<Item = Result<super::NewCollectiveMessageResponse, tonic::Status>>
             + Send
             + Sync
             + 'static;
@@ -698,7 +747,7 @@ pub mod chat_server {
             request: tonic::Request<super::NewCollectiveMessageRequest>,
         ) -> Result<tonic::Response<Self::NewGroupMessageStream>, tonic::Status>;
         #[doc = "Server streaming response type for the TypingMessage method."]
-        type TypingMessageStream: Stream<Item = Result<super::TypingMessageResponse, tonic::Status>>
+        type TypingMessageStream: futures_core::Stream<Item = Result<super::TypingMessageResponse, tonic::Status>>
             + Send
             + Sync
             + 'static;
@@ -707,7 +756,7 @@ pub mod chat_server {
             request: tonic::Request<super::TypingMessageRequest>,
         ) -> Result<tonic::Response<Self::TypingMessageStream>, tonic::Status>;
         #[doc = "Server streaming response type for the TypingGroupMessage method."]
-        type TypingGroupMessageStream: Stream<Item = Result<super::TypingMessageResponse, tonic::Status>>
+        type TypingGroupMessageStream: futures_core::Stream<Item = Result<super::TypingMessageResponse, tonic::Status>>
             + Send
             + Sync
             + 'static;
@@ -716,7 +765,7 @@ pub mod chat_server {
             request: tonic::Request<super::TypingMessageRequest>,
         ) -> Result<tonic::Response<Self::TypingGroupMessageStream>, tonic::Status>;
         #[doc = "Server streaming response type for the ChatClosed method."]
-        type ChatClosedStream: Stream<Item = Result<super::ChatClosedResponse, tonic::Status>>
+        type ChatClosedStream: futures_core::Stream<Item = Result<super::ChatClosedResponse, tonic::Status>>
             + Send
             + Sync
             + 'static;
@@ -724,8 +773,8 @@ pub mod chat_server {
             &mut self,
             request: tonic::Request<super::ChatClosedRequest>,
         ) -> Result<tonic::Response<Self::ChatClosedStream>, tonic::Status>;
-        #[doc = "Server streaming response type for the CollectiveChatClosed method."]
-        type GroupChatClosedStream: Stream<Item = Result<super::CollectiveChatClosedResponse, tonic::Status>>
+        #[doc = "Server streaming response type for the GroupChatClosed method."]
+        type GroupChatClosedStream: futures_core::Stream<Item = Result<super::CollectiveChatClosedResponse, tonic::Status>>
             + Send
             + Sync
             + 'static;
@@ -741,7 +790,8 @@ pub mod chat_server {
             &mut self,
             request: tonic::Request<super::AdminStatusRequest>,
         ) -> Result<tonic::Response<super::AdminStatusResponse>, tonic::Status>;
-        type GetAdminStatusStream: Stream<Item = Result<super::GetAdminStatusResponse, tonic::Status>>
+        #[doc = "Server streaming response type for the GetAdminStatus method."]
+        type GetAdminStatusStream: futures_core::Stream<Item = Result<super::GetAdminStatusResponse, tonic::Status>>
             + Send
             + Sync
             + 'static;
@@ -749,17 +799,18 @@ pub mod chat_server {
             &mut self,
             request: tonic::Request<super::GetAdminStatusRequest>,
         ) -> Result<tonic::Response<Self::GetAdminStatusStream>, tonic::Status>;
-        #[doc = "Server streaming response type for the BlockUserInCollectiveChat method."]
-        type BlockUserInGroupChatStream: Stream<Item = Result<super::BlockUserInCollectiveChatResponse, tonic::Status>>
-            + Send
+        #[doc = "Server streaming response type for the BlockUserInGroupChat method."]
+        type BlockUserInGroupChatStream: futures_core::Stream<
+                Item = Result<super::BlockUserInCollectiveChatResponse, tonic::Status>,
+            > + Send
             + Sync
             + 'static;
         async fn block_user_in_group_chat(
             &mut self,
             request: tonic::Request<super::BlockUserInCollectiveChatRequest>,
         ) -> Result<tonic::Response<Self::BlockUserInGroupChatStream>, tonic::Status>;
-        #[doc = "Server streaming response type for the ClearCollectiveChat method."]
-        type ClearGroupChatStream: Stream<Item = Result<super::ClearCollectiveChatResponse, tonic::Status>>
+        #[doc = "Server streaming response type for the ClearGroupChat method."]
+        type ClearGroupChatStream: futures_core::Stream<Item = Result<super::ClearCollectiveChatResponse, tonic::Status>>
             + Send
             + Sync
             + 'static;
@@ -768,8 +819,9 @@ pub mod chat_server {
             request: tonic::Request<super::ClearCollectiveChatRequest>,
         ) -> Result<tonic::Response<Self::ClearGroupChatStream>, tonic::Status>;
         #[doc = "Server streaming response type for the BlockUserInPersonalChat method."]
-        type BlockUserInPersonalChatStream: Stream<Item = Result<super::BlockUserInPersonalChatResponse, tonic::Status>>
-            + Send
+        type BlockUserInPersonalChatStream: futures_core::Stream<
+                Item = Result<super::BlockUserInPersonalChatResponse, tonic::Status>,
+            > + Send
             + Sync
             + 'static;
         async fn block_user_in_personal_chat(
@@ -777,7 +829,7 @@ pub mod chat_server {
             request: tonic::Request<super::BlockUserInPersonalChatRequest>,
         ) -> Result<tonic::Response<Self::BlockUserInPersonalChatStream>, tonic::Status>;
         #[doc = "Server streaming response type for the ClearPersonalChat method."]
-        type ClearPersonalChatStream: Stream<Item = Result<super::ClearPersonalChatResponse, tonic::Status>>
+        type ClearPersonalChatStream: futures_core::Stream<Item = Result<super::ClearPersonalChatResponse, tonic::Status>>
             + Send
             + Sync
             + 'static;
@@ -794,7 +846,7 @@ pub mod chat_server {
             request: tonic::Request<tonic::Streaming<super::UploadImageRequest>>,
         ) -> Result<tonic::Response<super::UploadImageResponse>, tonic::Status>;
         #[doc = "Server streaming response type for the DownloadImage method."]
-        type DownloadImageStream: Stream<Item = Result<super::DownloadImageResponse, tonic::Status>>
+        type DownloadImageStream: futures_core::Stream<Item = Result<super::DownloadImageResponse, tonic::Status>>
             + Send
             + Sync
             + 'static;
@@ -810,24 +862,31 @@ pub mod chat_server {
     #[derive(Debug)]
     pub struct ChatServer<T: Chat> {
         inner: _Inner<T>,
+        accept_compression_encodings: (),
+        send_compression_encodings: (),
     }
-    struct _Inner<T>(Arc<Mutex<T>>, Option<tonic::Interceptor>);
+    struct _Inner<T>(Arc<Mutex<T>>);
     impl<T: Chat> ChatServer<T> {
         pub fn new(inner: T) -> Self {
             let inner = Arc::new(Mutex::new(inner));
-            let inner = _Inner(inner, None);
-            Self { inner }
+            let inner = _Inner(inner);
+            Self {
+                inner,
+                accept_compression_encodings: Default::default(),
+                send_compression_encodings: Default::default(),
+            }
         }
-        pub fn with_interceptor(inner: T, interceptor: impl Into<tonic::Interceptor>) -> Self {
-            let inner = Arc::new(Mutex::new(inner));
-            let inner = _Inner(inner, Some(interceptor.into()));
-            Self { inner }
+        pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
+        where
+            F: FnMut(tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status>,
+        {
+            InterceptedService::new(Self::new(inner), interceptor)
         }
     }
     impl<T, B> Service<http::Request<B>> for ChatServer<T>
     where
         T: Chat,
-        B: HttpBody + Send + Sync + 'static,
+        B: Body + Send + Sync + 'static,
         B::Error: Into<StdError> + Send + 'static,
     {
         type Response = http::Response<tonic::body::BoxBody>;
@@ -860,17 +919,17 @@ pub mod chat_server {
                             Box::pin(fut)
                         }
                     }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let interceptor = inner.1;
                         let inner = inner.0;
                         let method = NewPeerSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = if let Some(interceptor) = interceptor {
-                            tonic::server::Grpc::with_interceptor(codec, interceptor)
-                        } else {
-                            tonic::server::Grpc::new(codec)
-                        };
+                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
+                            accept_compression_encodings,
+                            send_compression_encodings,
+                        );
                         let res = grpc.server_streaming(method, req).await;
                         Ok(res)
                     };
@@ -891,25 +950,25 @@ pub mod chat_server {
                             request: tonic::Request<super::SearchingPeerRequest>,
                         ) -> Self::Future {
                             let inner = self.0.clone();
-                            let fut = async move {
-                                //(*inner).searching_peer(request).await
+                            let fut = async move { 
+                                //(*inner).searching_peer(request).await 
                                 let mut tmp_inner = inner.lock().await;
-                                tmp_inner.searching_peer(request).await
+                                tmp_inner.searching_peer(request).await 
                             };
                             Box::pin(fut)
                         }
                     }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let interceptor = inner.1;
                         let inner = inner.0;
                         let method = SearchingPeerSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = if let Some(interceptor) = interceptor {
-                            tonic::server::Grpc::with_interceptor(codec, interceptor)
-                        } else {
-                            tonic::server::Grpc::new(codec)
-                        };
+                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
+                            accept_compression_encodings,
+                            send_compression_encodings,
+                        );
                         let res = grpc.server_streaming(method, req).await;
                         Ok(res)
                     };
@@ -926,25 +985,25 @@ pub mod chat_server {
                             request: tonic::Request<super::NewCoordinatesRequest>,
                         ) -> Self::Future {
                             let inner = self.0.clone();
-                            let fut = async move {
-                                //(*inner).new_coordinates(request).await
+                            let fut = async move { 
+                                //(*inner).new_coordinates(request).await 
                                 let mut tmp_inner = inner.lock().await;
-                                tmp_inner.new_coordinates(request).await
+                                tmp_inner.new_coordinates(request).await 
                             };
                             Box::pin(fut)
                         }
                     }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let interceptor = inner.1.clone();
                         let inner = inner.0;
                         let method = NewCoordinatesSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = if let Some(interceptor) = interceptor {
-                            tonic::server::Grpc::with_interceptor(codec, interceptor)
-                        } else {
-                            tonic::server::Grpc::new(codec)
-                        };
+                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
+                            accept_compression_encodings,
+                            send_compression_encodings,
+                        );
                         let res = grpc.unary(method, req).await;
                         Ok(res)
                     };
@@ -963,25 +1022,25 @@ pub mod chat_server {
                             request: tonic::Request<super::NewMessageRequest>,
                         ) -> Self::Future {
                             let inner = self.0.clone();
-                            let fut = async move {
-                                //(*inner).new_message(request).await
+                            let fut = async move { 
+                                //(*inner).new_message(request).await 
                                 let mut tmp_inner = inner.lock().await;
-                                tmp_inner.new_message(request).await
+                                tmp_inner.new_message(request).await 
                             };
                             Box::pin(fut)
                         }
                     }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let interceptor = inner.1;
                         let inner = inner.0;
                         let method = NewMessageSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = if let Some(interceptor) = interceptor {
-                            tonic::server::Grpc::with_interceptor(codec, interceptor)
-                        } else {
-                            tonic::server::Grpc::new(codec)
-                        };
+                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
+                            accept_compression_encodings,
+                            send_compression_encodings,
+                        );
                         let res = grpc.server_streaming(method, req).await;
                         Ok(res)
                     };
@@ -1003,25 +1062,25 @@ pub mod chat_server {
                             request: tonic::Request<super::NewCollectiveMessageRequest>,
                         ) -> Self::Future {
                             let inner = self.0.clone();
-                            let fut = async move {
-                                //(*inner).new_collective_message(request).await
+                            let fut = async move { 
+                                //(*inner).new_group_message(request).await 
                                 let mut tmp_inner = inner.lock().await;
                                 tmp_inner.new_group_message(request).await
                             };
                             Box::pin(fut)
                         }
                     }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let interceptor = inner.1;
                         let inner = inner.0;
                         let method = NewGroupMessageSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = if let Some(interceptor) = interceptor {
-                            tonic::server::Grpc::with_interceptor(codec, interceptor)
-                        } else {
-                            tonic::server::Grpc::new(codec)
-                        };
+                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
+                            accept_compression_encodings,
+                            send_compression_encodings,
+                        );
                         let res = grpc.server_streaming(method, req).await;
                         Ok(res)
                     };
@@ -1042,25 +1101,25 @@ pub mod chat_server {
                             request: tonic::Request<super::TypingMessageRequest>,
                         ) -> Self::Future {
                             let inner = self.0.clone();
-                            let fut = async move {
-                                //(*inner).typing_message(request).await
+                            let fut = async move { 
+                                //(*inner).typing_message(request).await 
                                 let mut tmp_inner = inner.lock().await;
                                 tmp_inner.typing_message(request).await
                             };
                             Box::pin(fut)
                         }
                     }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let interceptor = inner.1;
                         let inner = inner.0;
                         let method = TypingMessageSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = if let Some(interceptor) = interceptor {
-                            tonic::server::Grpc::with_interceptor(codec, interceptor)
-                        } else {
-                            tonic::server::Grpc::new(codec)
-                        };
+                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
+                            accept_compression_encodings,
+                            send_compression_encodings,
+                        );
                         let res = grpc.server_streaming(method, req).await;
                         Ok(res)
                     };
@@ -1084,22 +1143,22 @@ pub mod chat_server {
                             let fut = async move { 
                                 //(*inner).typing_group_message(request).await 
                                 let mut tmp_inner = inner.lock().await;
-                                tmp_inner.typing_group_message(request).await 
+                                tmp_inner.typing_group_message(request).await
                             };
                             Box::pin(fut)
                         }
                     }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let interceptor = inner.1;
                         let inner = inner.0;
                         let method = TypingGroupMessageSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = if let Some(interceptor) = interceptor {
-                            tonic::server::Grpc::with_interceptor(codec, interceptor)
-                        } else {
-                            tonic::server::Grpc::new(codec)
-                        };
+                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
+                            accept_compression_encodings,
+                            send_compression_encodings,
+                        );
                         let res = grpc.server_streaming(method, req).await;
                         Ok(res)
                     };
@@ -1118,7 +1177,7 @@ pub mod chat_server {
                             request: tonic::Request<super::ChatClosedRequest>,
                         ) -> Self::Future {
                             let inner = self.0.clone();
-                            let fut = async move {
+                            let fut = async move { 
                                 //(*inner).chat_closed(request).await
                                 let mut tmp_inner = inner.lock().await;
                                 tmp_inner.chat_closed(request).await
@@ -1126,17 +1185,17 @@ pub mod chat_server {
                             Box::pin(fut)
                         }
                     }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let interceptor = inner.1;
                         let inner = inner.0;
                         let method = ChatClosedSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = if let Some(interceptor) = interceptor {
-                            tonic::server::Grpc::with_interceptor(codec, interceptor)
-                        } else {
-                            tonic::server::Grpc::new(codec)
-                        };
+                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
+                            accept_compression_encodings,
+                            send_compression_encodings,
+                        );
                         let res = grpc.server_streaming(method, req).await;
                         Ok(res)
                     };
@@ -1158,25 +1217,25 @@ pub mod chat_server {
                             request: tonic::Request<super::CollectiveChatClosedRequest>,
                         ) -> Self::Future {
                             let inner = self.0.clone();
-                            let fut = async move {
-                                //(*inner).collective_chat_closed(request).await
+                            let fut = async move { 
+                                //(*inner).group_chat_closed(request).await
                                 let mut tmp_inner = inner.lock().await;
                                 tmp_inner.group_chat_closed(request).await
                             };
                             Box::pin(fut)
                         }
                     }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let interceptor = inner.1;
                         let inner = inner.0;
                         let method = GroupChatClosedSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = if let Some(interceptor) = interceptor {
-                            tonic::server::Grpc::with_interceptor(codec, interceptor)
-                        } else {
-                            tonic::server::Grpc::new(codec)
-                        };
+                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
+                            accept_compression_encodings,
+                            send_compression_encodings,
+                        );
                         let res = grpc.server_streaming(method, req).await;
                         Ok(res)
                     };
@@ -1201,17 +1260,17 @@ pub mod chat_server {
                             Box::pin(fut)
                         }
                     }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let interceptor = inner.1.clone();
                         let inner = inner.0;
                         let method = PeerClosedSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = if let Some(interceptor) = interceptor {
-                            tonic::server::Grpc::with_interceptor(codec, interceptor)
-                        } else {
-                            tonic::server::Grpc::new(codec)
-                        };
+                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
+                            accept_compression_encodings,
+                            send_compression_encodings,
+                        );
                         let res = grpc.unary(method, req).await;
                         Ok(res)
                     };
@@ -1236,17 +1295,17 @@ pub mod chat_server {
                             Box::pin(fut)
                         }
                     }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let interceptor = inner.1.clone();
                         let inner = inner.0;
                         let method = AdminStatusSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = if let Some(interceptor) = interceptor {
-                            tonic::server::Grpc::with_interceptor(codec, interceptor)
-                        } else {
-                            tonic::server::Grpc::new(codec)
-                        };
+                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
+                            accept_compression_encodings,
+                            send_compression_encodings,
+                        );
                         let res = grpc.unary(method, req).await;
                         Ok(res)
                     };
@@ -1271,22 +1330,22 @@ pub mod chat_server {
                             let fut = async move { 
                                 //(*inner).get_admin_status(request).await 
                                 let mut tmp_inner = inner.lock().await;
-                                tmp_inner.get_admin_status(request).await
+                                tmp_inner.get_admin_status(request).await 
                             };
                             Box::pin(fut)
                         }
                     }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let interceptor = inner.1;
                         let inner = inner.0;
                         let method = GetAdminStatusSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = if let Some(interceptor) = interceptor {
-                            tonic::server::Grpc::with_interceptor(codec, interceptor)
-                        } else {
-                            tonic::server::Grpc::new(codec)
-                        };
+                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
+                            accept_compression_encodings,
+                            send_compression_encodings,
+                        );
                         let res = grpc.server_streaming(method, req).await;
                         Ok(res)
                     };
@@ -1309,25 +1368,26 @@ pub mod chat_server {
                             request: tonic::Request<super::BlockUserInCollectiveChatRequest>,
                         ) -> Self::Future {
                             let inner = self.0.clone();
-                            let fut = async move {
-                                //(*inner).block_user_in_collective_chat(request).await
-                                let mut tmp_inner = inner.lock().await;
-                                tmp_inner.block_user_in_group_chat(request).await
-                            };
+                            let fut =
+                                async move { 
+                                    //(*inner).block_user_in_group_chat(request).await
+                                    let mut tmp_inner = inner.lock().await;
+                                    tmp_inner.block_user_in_group_chat(request).await
+                                };
                             Box::pin(fut)
                         }
                     }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let interceptor = inner.1;
                         let inner = inner.0;
                         let method = BlockUserInGroupChatSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = if let Some(interceptor) = interceptor {
-                            tonic::server::Grpc::with_interceptor(codec, interceptor)
-                        } else {
-                            tonic::server::Grpc::new(codec)
-                        };
+                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
+                            accept_compression_encodings,
+                            send_compression_encodings,
+                        );
                         let res = grpc.server_streaming(method, req).await;
                         Ok(res)
                     };
@@ -1350,23 +1410,24 @@ pub mod chat_server {
                         ) -> Self::Future {
                             let inner = self.0.clone();
                             let fut = async move { 
+                                //(*inner).clear_group_chat(request).await
                                 let mut tmp_inner = inner.lock().await;
                                 tmp_inner.clear_group_chat(request).await
                             };
                             Box::pin(fut)
                         }
                     }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let interceptor = inner.1;
                         let inner = inner.0;
                         let method = ClearGroupChatSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = if let Some(interceptor) = interceptor {
-                            tonic::server::Grpc::with_interceptor(codec, interceptor)
-                        } else {
-                            tonic::server::Grpc::new(codec)
-                        };
+                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
+                            accept_compression_encodings,
+                            send_compression_encodings,
+                        );
                         let res = grpc.server_streaming(method, req).await;
                         Ok(res)
                     };
@@ -1390,24 +1451,24 @@ pub mod chat_server {
                             let inner = self.0.clone();
                             let fut =
                                 async move { 
-                                    //(*inner).block_user_in_personal_chat(request).await 
+                                    //(*inner).block_user_in_personal_chat(request).await
                                     let mut tmp_inner = inner.lock().await;
                                     tmp_inner.block_user_in_personal_chat(request).await
                                 };
                             Box::pin(fut)
                         }
                     }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let interceptor = inner.1;
                         let inner = inner.0;
                         let method = BlockUserInPersonalChatSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = if let Some(interceptor) = interceptor {
-                            tonic::server::Grpc::with_interceptor(codec, interceptor)
-                        } else {
-                            tonic::server::Grpc::new(codec)
-                        };
+                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
+                            accept_compression_encodings,
+                            send_compression_encodings,
+                        );
                         let res = grpc.server_streaming(method, req).await;
                         Ok(res)
                     };
@@ -1437,17 +1498,17 @@ pub mod chat_server {
                             Box::pin(fut)
                         }
                     }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let interceptor = inner.1;
                         let inner = inner.0;
                         let method = ClearPersonalChatSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = if let Some(interceptor) = interceptor {
-                            tonic::server::Grpc::with_interceptor(codec, interceptor)
-                        } else {
-                            tonic::server::Grpc::new(codec)
-                        };
+                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
+                            accept_compression_encodings,
+                            send_compression_encodings,
+                        );
                         let res = grpc.server_streaming(method, req).await;
                         Ok(res)
                     };
@@ -1465,24 +1526,24 @@ pub mod chat_server {
                         ) -> Self::Future {
                             let inner = self.0.clone();
                             let fut = async move { 
-                                //(*inner).report_user(request).await 
+                                //(*inner).report_user(request).await
                                 let tmp_inner = inner.lock().await;
                                 tmp_inner.report_user(request).await
                             };
                             Box::pin(fut)
                         }
                     }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let interceptor = inner.1.clone();
                         let inner = inner.0;
                         let method = ReportUserSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = if let Some(interceptor) = interceptor {
-                            tonic::server::Grpc::with_interceptor(codec, interceptor)
-                        } else {
-                            tonic::server::Grpc::new(codec)
-                        };
+                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
+                            accept_compression_encodings,
+                            send_compression_encodings,
+                        );
                         let res = grpc.unary(method, req).await;
                         Ok(res)
                     };
@@ -1502,24 +1563,24 @@ pub mod chat_server {
                         ) -> Self::Future {
                             let inner = self.0.clone();
                             let fut = async move { 
-                                //(*inner).upload_image(request).await 
+                                //(*inner).upload_image(request).await
                                 let mut tmp_inner = inner.lock().await;
                                 tmp_inner.upload_image(request).await
                             };
                             Box::pin(fut)
                         }
                     }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let interceptor = inner.1;
                         let inner = inner.0;
                         let method = UploadImageSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = if let Some(interceptor) = interceptor {
-                            tonic::server::Grpc::with_interceptor(codec, interceptor)
-                        } else {
-                            tonic::server::Grpc::new(codec)
-                        };
+                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
+                            accept_compression_encodings,
+                            send_compression_encodings,
+                        );
                         let res = grpc.client_streaming(method, req).await;
                         Ok(res)
                     };
@@ -1541,24 +1602,24 @@ pub mod chat_server {
                         ) -> Self::Future {
                             let inner = self.0.clone();
                             let fut = async move { 
-                                //(*inner).download_image(request).await 
+                                //(*inner).download_image(request).await
                                 let tmp_inner = inner.lock().await;
-                                tmp_inner.download_image(request).await 
+                                tmp_inner.download_image(request).await
                             };
                             Box::pin(fut)
                         }
                     }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let interceptor = inner.1;
                         let inner = inner.0;
                         let method = DownloadImageSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = if let Some(interceptor) = interceptor {
-                            tonic::server::Grpc::with_interceptor(codec, interceptor)
-                        } else {
-                            tonic::server::Grpc::new(codec)
-                        };
+                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
+                            accept_compression_encodings,
+                            send_compression_encodings,
+                        );
                         let res = grpc.server_streaming(method, req).await;
                         Ok(res)
                     };
@@ -1576,24 +1637,24 @@ pub mod chat_server {
                         ) -> Self::Future {
                             let inner = self.0.clone();
                             let fut = async move { 
-                                //(*inner).remove_image(request).await 
+                                //(*inner).remove_image(request).await
                                 let mut tmp_inner = inner.lock().await;
                                 tmp_inner.remove_image(request).await
                             };
                             Box::pin(fut)
                         }
                     }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let interceptor = inner.1.clone();
                         let inner = inner.0;
                         let method = RemoveImageSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = if let Some(interceptor) = interceptor {
-                            tonic::server::Grpc::with_interceptor(codec, interceptor)
-                        } else {
-                            tonic::server::Grpc::new(codec)
-                        };
+                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
+                            accept_compression_encodings,
+                            send_compression_encodings,
+                        );
                         let res = grpc.unary(method, req).await;
                         Ok(res)
                     };
@@ -1604,7 +1665,7 @@ pub mod chat_server {
                         .status(200)
                         .header("grpc-status", "12")
                         .header("content-type", "application/grpc")
-                        .body(tonic::body::BoxBody::empty())
+                        .body(empty_body())
                         .unwrap())
                 }),
             }
@@ -1613,12 +1674,16 @@ pub mod chat_server {
     impl<T: Chat> Clone for ChatServer<T> {
         fn clone(&self) -> Self {
             let inner = self.inner.clone();
-            Self { inner }
+            Self {
+                inner,
+                accept_compression_encodings: self.accept_compression_encodings,
+                send_compression_encodings: self.send_compression_encodings,
+            }
         }
     }
     impl<T: Chat> Clone for _Inner<T> {
         fn clone(&self) -> Self {
-            Self(self.0.clone(), self.1.clone())
+            Self(self.0.clone())
         }
     }
     impl<T: std::fmt::Debug> std::fmt::Debug for _Inner<T> {
