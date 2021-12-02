@@ -29,6 +29,8 @@ message SearchingPeerRequest {
     string searching_gender = 12;
     int32 searching_min_age = 13;
     int32 searching_max_age = 14;
+    string city = 15;
+    string searching_city = 16;
 }
 
 message SearchingPeerResponse {
@@ -40,6 +42,7 @@ message SearchingPeerResponse {
     string user_name = 6;
     string description = 7;
     bool is_admin_on = 8;
+    string city = 9;
 }
 
 message NewCoordinatesRequest {

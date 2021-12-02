@@ -38,6 +38,10 @@ pub struct SearchingPeerRequest {
     pub searching_min_age: i32,
     #[prost(int32, tag = "14")]
     pub searching_max_age: i32,
+    #[prost(string, tag = "15")]
+    pub city: ::prost::alloc::string::String,
+    #[prost(string, tag = "16")]
+    pub searching_city: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SearchingPeerResponse {
@@ -57,6 +61,8 @@ pub struct SearchingPeerResponse {
     pub description: ::prost::alloc::string::String,
     #[prost(bool, tag = "8")]
     pub is_admin_on: bool,
+    #[prost(string, tag = "9")]
+    pub city: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NewCoordinatesRequest {
