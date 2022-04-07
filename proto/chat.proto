@@ -65,7 +65,7 @@ message NewMessageResponse {
     string message = 2;
 }
 
-message NewCollectiveMessageRequest {
+message NewGroupMessageRequest {
     string user_id = 1;
     string message = 2;
     string admin_id = 3;
@@ -73,7 +73,7 @@ message NewCollectiveMessageRequest {
     bool is_admin = 5;
 }
 
-message NewCollectiveMessageResponse {
+message NewGroupMessageResponse {
     int32 response_code = 1;
     string message = 2;
     string user_name = 3;
@@ -97,12 +97,12 @@ message ChatClosedRequest {
 
 message ChatClosedResponse {}
 
-message CollectiveChatClosedRequest {
+message GroupChatClosedRequest {
     string user_id = 1;
     bool is_closed = 2;
 }
 
-message CollectiveChatClosedResponse {}
+message GroupChatClosedResponse {}
 
 message AdminStatusRequest {
     string user_id = 1;
@@ -130,25 +130,25 @@ message PeerClosedResponse{
     int32 response_code = 1;
 }
 
-message BlockUserInCollectiveChatRequest{
+message BlockUserInGroupChatRequest{
     string admin_id = 1;
     string blocked_user_id = 2;
     string blocking_time = 3; // 1h or 3h or 5h or always
 }
 
-message BlockUserInCollectiveChatResponse {
+message BlockUserInGroupChatResponse {
     int32 response_code = 1;
     string blocking_time = 2;
     string admin_id = 3;
 }
 
-message ClearCollectiveChatRequest {
+message ClearGroupChatRequest {
     string admin_id = 1;
     bool clear_chat = 2;
     string user_id = 3;
 }
 
-message ClearCollectiveChatResponse {
+message ClearGroupChatResponse {
 
 }
 
@@ -185,7 +185,7 @@ message ReportUserResponse {
 
 }
 
-message UploadImageRequest {
+/*message UploadImageRequest {
     string user_id = 1;
     bytes file_chunk = 2;
     string image_name = 3;
@@ -193,44 +193,44 @@ message UploadImageRequest {
 
 message UploadImageResponse {
 
-}
+}*/
 
-message DownloadImageRequest {
+/*message DownloadImageRequest {
     string user_id = 1;
 }
 
 message DownloadImageResponse {
     int32 response_code = 1;
     bytes file_chunk = 2;
-}
+}*/
 
-message RemoveImageRequest {
+/*message RemoveImageRequest {
     string user_id = 1;
 }
 
 message RemoveImageResponse {
     int32 response_code = 1;
-}
+}*/
 
 service Chat {
     rpc NewPeer (NewPeerRequest) returns (stream NewPeerResponse) {}
     rpc SearchingPeer(SearchingPeerRequest) returns (stream SearchingPeerResponse) {}
     rpc NewCoordinates(NewCoordinatesRequest) returns(NewCoordinatesResponse) {}
     rpc NewMessage(NewMessageRequest) returns (stream NewMessageResponse) {}
-    rpc NewGroupMessage(NewCollectiveMessageRequest) returns (stream NewCollectiveMessageResponse) {}
+    rpc NewGroupMessage(NewGroupMessageRequest) returns (stream NewGroupMessageResponse) {}
     rpc TypingMessage(TypingMessageRequest) returns (stream TypingMessageResponse) {}
     rpc TypingGroupMessage(TypingMessageRequest) returns (stream TypingMessageResponse) {}
     rpc ChatClosed(ChatClosedRequest) returns(stream ChatClosedResponse){}
-    rpc GroupChatClosed(CollectiveChatClosedRequest) returns(stream CollectiveChatClosedResponse){}
+    rpc GroupChatClosed(GroupChatClosedRequest) returns(stream GroupChatClosedResponse){}
     rpc PeerClosed (PeerClosedRequest) returns (PeerClosedResponse) {}
     rpc AdminStatus(AdminStatusRequest)returns (AdminStatusResponse){}
     rpc GetAdminStatus(GetAdminStatusRequest) returns (stream GetAdminStatusResponse) {}
-    rpc BlockUserInGroupChat(BlockUserInCollectiveChatRequest) returns (stream BlockUserInCollectiveChatResponse) {}
-    rpc ClearGroupChat(ClearCollectiveChatRequest) returns (stream ClearCollectiveChatResponse) {}
+    rpc BlockUserInGroupChat(BlockUserInGroupChatRequest) returns (stream BlockUserInGroupChatResponse) {}
+    rpc ClearGroupChat(ClearGroupChatRequest) returns (stream ClearGroupChatResponse) {}
     rpc BlockUserInPersonalChat(BlockUserInPersonalChatRequest) returns(stream BlockUserInPersonalChatResponse) {}
     rpc ClearPersonalChat(ClearPersonalChatRequest) returns(stream ClearPersonalChatResponse) {}
     rpc ReportUser(ReportUserRequest) returns(ReportUserResponse){}
-    rpc UploadImage(stream UploadImageRequest) returns(UploadImageResponse){}
-    rpc DownloadImage(DownloadImageRequest) returns(stream DownloadImageResponse){}
-    rpc RemoveImage(RemoveImageRequest) returns(RemoveImageResponse) {}
+    //rpc UploadImage(stream UploadImageRequest) returns(UploadImageResponse){}
+    //rpc DownloadImage(DownloadImageRequest) returns(stream DownloadImageResponse){}
+    //rpc RemoveImage(RemoveImageRequest) returns(RemoveImageResponse) {}
 }

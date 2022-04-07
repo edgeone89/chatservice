@@ -8,12 +8,12 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use std::path::Path;
+/*use std::path::Path;
 use std::fs::File;
 use std::io::Write;
 use std::io::Read;
 use std::io::BufWriter;
-use std::io::BufReader;
+use std::io::BufReader;*/
 use std::pin::Pin;
 use std::task::Poll;
 use std::task::Context;
@@ -23,7 +23,8 @@ use std::task::Context;
 }*/
 const CHAT_SERVER_ADDRESS: &str = "192.168.0.100:50051";
 const PUSH_NOTIFITCATION_SERVER_ADDRESS: &str = "http://192.168.0.100:50052";
-const USER_IMAGES_DIR: &str = "user_imgs";
+
+//const USER_IMAGES_DIR: &str = "user_imgs";
 
 const SEARCHING_PEER_RESPONSE_CODE_SUCCESS: i32 = 1;
 const SEARCHING_PEER_RESPONSE_CODE_NO_PEER: i32 = 2;
@@ -36,16 +37,15 @@ mod chatservice;
 use chatservice::chat_server::{Chat, ChatServer};
 use chatservice::{NewPeerRequest, NewPeerResponse, SearchingPeerRequest, SearchingPeerResponse, 
     NewCoordinatesRequest, NewCoordinatesResponse,
-    NewMessageRequest, NewMessageResponse, NewCollectiveMessageRequest,
-    NewCollectiveMessageResponse, TypingMessageRequest, TypingMessageResponse, 
-    ChatClosedRequest, ChatClosedResponse, CollectiveChatClosedRequest, 
-    CollectiveChatClosedResponse, PeerClosedRequest, PeerClosedResponse,
-    AdminStatusRequest, AdminStatusResponse, BlockUserInCollectiveChatRequest,
-    BlockUserInCollectiveChatResponse, ClearCollectiveChatRequest, ClearCollectiveChatResponse,
+    NewMessageRequest, NewMessageResponse, NewGroupMessageRequest,
+    NewGroupMessageResponse, TypingMessageRequest, TypingMessageResponse, 
+    ChatClosedRequest, ChatClosedResponse, GroupChatClosedRequest, 
+    GroupChatClosedResponse, PeerClosedRequest, PeerClosedResponse,
+    AdminStatusRequest, AdminStatusResponse, BlockUserInGroupChatRequest,
+    BlockUserInGroupChatResponse, ClearGroupChatRequest, ClearGroupChatResponse,
     BlockUserInPersonalChatRequest, BlockUserInPersonalChatResponse,
     ClearPersonalChatRequest, ClearPersonalChatResponse,
-    ReportUserRequest, ReportUserResponse,UploadImageRequest,UploadImageResponse,
-    DownloadImageRequest, DownloadImageResponse, RemoveImageRequest, RemoveImageResponse,
+    ReportUserRequest, ReportUserResponse,
     GetAdminStatusRequest, GetAdminStatusResponse
 };
 
@@ -58,18 +58,18 @@ struct ConnectedClient {
     //blocked_by_admin_ids_in_collective_chat: HashMap<String, UserBlockTime>,
     //blocked_in_personal_chats: HashMap<String, UserBlockTime>,
     sender_new_peer: Option<Sender<Result<NewPeerResponse, Status>>>,
-    sender_blocked_in_collective_chat: Option<Sender<Result<BlockUserInCollectiveChatResponse, Status>>>,
+    sender_blocked_in_collective_chat: Option<Sender<Result<BlockUserInGroupChatResponse, Status>>>,
     sender_blocked_in_personal_chat: Option<Sender<Result<BlockUserInPersonalChatResponse, Status>>>,
-    sender_clear_collective_chat: Option<Sender<Result<ClearCollectiveChatResponse, Status>>>,
+    sender_clear_collective_chat: Option<Sender<Result<ClearGroupChatResponse, Status>>>,
     sender_clear_personal_chat: Option<Sender<Result<ClearPersonalChatResponse, Status>>>,
-    sender_collective_chat_closed_clients: Option<Sender<Result<CollectiveChatClosedResponse, Status>>>,
+    sender_collective_chat_closed_clients: Option<Sender<Result<GroupChatClosedResponse, Status>>>,
     sender_chat_closed_clients: Option<Sender<Result<ChatClosedResponse, Status>>>,
     sender_typing_message: Option<Sender<Result<TypingMessageResponse, Status>>>,
     sender_typing_group_message: Option<Sender<Result<TypingMessageResponse, Status>>>,
     sender_personal_chat_message: Option<Sender<Result<NewMessageResponse, Status>>>,
-    sender_group_chat_message: Option<Sender<Result<NewCollectiveMessageResponse, Status>>>,
+    sender_group_chat_message: Option<Sender<Result<NewGroupMessageResponse, Status>>>,
     sender_get_admin_status: Option<Sender<Result<GetAdminStatusResponse, Status>>>,
-    image_name: Option<String>
+    //image_name: Option<String>
 }
 
 struct SearchingPeer {
@@ -111,7 +111,7 @@ struct HABChat {
     connected_peer_to_peers: Arc<RwLock<HashMap<String, HashSet<String>>>>,
     get_admin_status_peers: Arc<RwLock<HashMap<String, HashSet<String>>>>,
     //chat_closed_clients: HashMap<String, Sender<Result<ChatClosedResponse, Status>>>,
-    //collective_chat_closed_clients: HashMap<String, Sender<Result<CollectiveChatClosedResponse, Status>>>,
+    //collective_chat_closed_clients: HashMap<String, Sender<Result<GroupChatClosedResponse, Status>>>,
 }
 
 pub struct DropReceiver<T> {
@@ -180,7 +180,7 @@ impl<T> Drop for DropReceiver<T> {
                         if connected_clients.contains_key(user_id2) == true {
                             if let Some(connected_client) = connected_clients.get(user_id2){
                                 if let Some(tx_tmp) = connected_client.sender_collective_chat_closed_clients.clone() {
-                                    let reply = CollectiveChatClosedResponse{};
+                                    let reply = GroupChatClosedResponse{};
                                     tokio::spawn(async move {
                                         let res = tx_tmp.send(Ok(reply)).await;
                                         if let Err(err) = res {
@@ -285,7 +285,7 @@ impl Chat for HABChat {
                 sender_personal_chat_message: Option::None,
                 sender_group_chat_message: Option::None,
                 sender_get_admin_status: Option::None,
-                image_name: Option::None
+                //image_name: Option::None
             };
             let connected_clients = &mut (*(self.connected_clients.write().await));
             connected_clients.insert(user_id_from_request, connected_client);
@@ -974,8 +974,8 @@ impl Chat for HABChat {
         return Ok(Response::new(receiver_stream));
     }
     
-    type NewGroupMessageStream = StreamReceiver<Result<NewCollectiveMessageResponse, Status>>;
-    async fn new_group_message(&mut self, request: Request<NewCollectiveMessageRequest>) -> 
+    type NewGroupMessageStream = StreamReceiver<Result<NewGroupMessageResponse, Status>>;
+    async fn new_group_message(&mut self, request: Request<NewGroupMessageRequest>) -> 
     Result<Response<Self::NewGroupMessageStream>, Status>
     {
         println!("Got a new_collective_message request from {:?}", request.remote_addr());
@@ -1013,7 +1013,7 @@ impl Chat for HABChat {
                             if let Some(tx_tmp_ref) = &connected_client.sender_group_chat_message {
                                 let tx_tmp = (*tx_tmp_ref).clone();
                                 if connected_client.is_admin_on == false {
-                                    let reply = chatservice::NewCollectiveMessageResponse {
+                                    let reply = chatservice::NewGroupMessageResponse {
                                         response_code: -1,
                                         message: "".to_string(),
                                         user_name: "".to_string(),
@@ -1026,7 +1026,7 @@ impl Chat for HABChat {
                                         }
                                     });
                                 } else {
-                                    let reply = chatservice::NewCollectiveMessageResponse {
+                                    let reply = chatservice::NewGroupMessageResponse {
                                         response_code: 1,
                                         message: "".to_string(),
                                         user_name: user_name_from_request.clone(),
@@ -1051,7 +1051,7 @@ impl Chat for HABChat {
                             if let Some(tx_tmp_ref) = &connected_client.sender_group_chat_message {
                                 let tx_tmp = (*tx_tmp_ref).clone();
                                 if connected_client.is_admin_on == false {
-                                    let reply = chatservice::NewCollectiveMessageResponse {
+                                    let reply = chatservice::NewGroupMessageResponse {
                                         response_code: -1,
                                         message: "".to_string(),
                                         user_name: "".to_string(),
@@ -1064,7 +1064,7 @@ impl Chat for HABChat {
                                         }
                                     });
                                 } else {
-                                    let reply = chatservice::NewCollectiveMessageResponse {
+                                    let reply = chatservice::NewGroupMessageResponse {
                                         response_code: 1,
                                         message: "".to_string(),
                                         user_name: user_name_from_request.clone(),
@@ -1096,7 +1096,7 @@ impl Chat for HABChat {
                                             if let Some(tx_tmp_ref) = &connected_peer.sender_group_chat_message {
                                         
                                                 let tx_tmp = (*tx_tmp_ref).clone();
-                                                let reply = chatservice::NewCollectiveMessageResponse {
+                                                let reply = chatservice::NewGroupMessageResponse {
                                                     response_code: 1,
                                                     message: message_from_request.clone(),
                                                     user_name: user_name_from_request.clone(),
@@ -1118,7 +1118,7 @@ impl Chat for HABChat {
                                 if let Some(connected_client) = connected_clients.get(&user_id_from_request) {
                                     if let Some(tx_tmp_ref) = &connected_client.sender_group_chat_message {
                                         let tx_tmp = (*tx_tmp_ref).clone();
-                                        let reply = chatservice::NewCollectiveMessageResponse {
+                                        let reply = chatservice::NewGroupMessageResponse {
                                             response_code: -1,
                                             message: "".to_string(),
                                             user_name: "".to_string(),
@@ -1146,7 +1146,7 @@ impl Chat for HABChat {
                             if let Some(connected_client) = connected_clients.get(peer) {
                                 if let Some(tx_tmp_ref) = &connected_client.sender_group_chat_message {
                                     let tx_tmp = (*tx_tmp_ref).clone();
-                                    let reply = chatservice::NewCollectiveMessageResponse {
+                                    let reply = chatservice::NewGroupMessageResponse {
                                         response_code: 1,
                                         message: message_from_request.clone(),
                                         user_name: user_name_from_request.clone(),
@@ -1168,7 +1168,7 @@ impl Chat for HABChat {
                         if let Some(tx_tmp_ref) = &connected_client.sender_group_chat_message {
                             let tx_tmp = (*tx_tmp_ref).clone();
                     
-                            let reply = chatservice::NewCollectiveMessageResponse {
+                            let reply = chatservice::NewGroupMessageResponse {
                                 response_code: 1,
                                 message: message_from_request.clone(),
                                 user_name: user_name_from_request.clone(),
@@ -1355,8 +1355,8 @@ impl Chat for HABChat {
         return Ok(Response::new(stream_receiver));
     }
 
-    type GroupChatClosedStream = StreamReceiver<Result<CollectiveChatClosedResponse, Status>>;
-    async fn group_chat_closed(&mut self, request: Request<CollectiveChatClosedRequest>) -> 
+    type GroupChatClosedStream = StreamReceiver<Result<GroupChatClosedResponse, Status>>;
+    async fn group_chat_closed(&mut self, request: Request<GroupChatClosedRequest>) -> 
     Result<Response<Self::GroupChatClosedStream>, Status>
     {
         println!("Got a collective_chat_closed request from {:?}", request.remote_addr());
@@ -1388,7 +1388,7 @@ impl Chat for HABChat {
                         if let Some(connected_client) = connected_clients.get(user_id2) {
                                                         
                             if let Some(tx_tmp) = connected_client.sender_collective_chat_closed_clients.clone() {
-                                let reply = CollectiveChatClosedResponse{};
+                                let reply = GroupChatClosedResponse{};
                                 tokio::spawn(async move {
                                     let res = tx_tmp.send(Ok(reply)).await;
                                     if let Err(err) = res {
@@ -1455,7 +1455,7 @@ impl Chat for HABChat {
                     if connected_clients.contains_key(user_id2) == true {
                         if let Some(connected_client) = connected_clients.get(user_id2){
                             if let Some(tx_tmp) = connected_client.sender_collective_chat_closed_clients.clone() {
-                                let reply = CollectiveChatClosedResponse{};
+                                let reply = GroupChatClosedResponse{};
                                 tokio::spawn(async move {
                                     let res = tx_tmp.send(Ok(reply)).await;
                                     if let Err(err) = res {
@@ -1624,10 +1624,10 @@ impl Chat for HABChat {
         return Ok(Response::new(stream_receiver));
     }
 
-    type BlockUserInGroupChatStream = StreamReceiver<Result<BlockUserInCollectiveChatResponse, Status>>;
+    type BlockUserInGroupChatStream = StreamReceiver<Result<BlockUserInGroupChatResponse, Status>>;
     async fn block_user_in_group_chat(
         &mut self,
-        request: Request<BlockUserInCollectiveChatRequest>,
+        request: Request<BlockUserInGroupChatRequest>,
     ) -> Result<Response<Self::BlockUserInGroupChatStream>, Status> {
         println!("Got a block_user_in_collective_chat request from {:?}", request.remote_addr());
         let (tx, rx) = mpsc::channel(4);
@@ -1646,7 +1646,7 @@ impl Chat for HABChat {
             }
         } else {
             if blocked_user_id_from_request != "" {
-                let reply = BlockUserInCollectiveChatResponse {
+                let reply = BlockUserInGroupChatResponse {
                     response_code: 1,
                     admin_id: admin_id_from_request,
                     blocking_time: blocking_time_from_request
@@ -1670,10 +1670,10 @@ impl Chat for HABChat {
         return Ok(Response::new(stream_receiver));
     }
 
-    type ClearGroupChatStream = StreamReceiver<Result<ClearCollectiveChatResponse, Status>>;
+    type ClearGroupChatStream = StreamReceiver<Result<ClearGroupChatResponse, Status>>;
     async fn clear_group_chat(
         &mut self,
-        request: Request<ClearCollectiveChatRequest>,
+        request: Request<ClearGroupChatRequest>,
     ) -> Result<Response<Self::ClearGroupChatStream>, Status>{
         println!("Got a clear_collective_chat request from {:?}", request.remote_addr());
         let (tx, rx) = mpsc::channel(4);
@@ -1699,7 +1699,7 @@ impl Chat for HABChat {
                     for peer in peers {
                         if let Some(connected_client) = connected_clients.get_mut(peer) {
                             if let Some(tx_tmp) = connected_client.sender_clear_collective_chat.clone() {
-                                let reply = ClearCollectiveChatResponse {
+                                let reply = ClearGroupChatResponse {
                                 };
                                 tokio::spawn(async move {
                                     let res = tx_tmp.send(Ok(reply)).await;
@@ -1832,7 +1832,7 @@ impl Chat for HABChat {
         return Ok(Response::new(ReportUserResponse{}));
     }
     
-    async fn upload_image(
+    /*async fn upload_image(
         &mut self,
         request: Request<tonic::Streaming<UploadImageRequest>>,
     ) -> Result<Response<UploadImageResponse>, tonic::Status>
@@ -1896,9 +1896,9 @@ impl Chat for HABChat {
         let reply = UploadImageResponse{
         };
         return Ok(Response::new(reply));
-    }
+    }*/
 
-    type DownloadImageStream = StreamReceiver<Result<DownloadImageResponse, tonic::Status>>;
+    /*type DownloadImageStream = StreamReceiver<Result<DownloadImageResponse, tonic::Status>>;
     async fn download_image(
         &self,
         request: tonic::Request<DownloadImageRequest>,
@@ -1931,16 +1931,6 @@ impl Chat for HABChat {
                                 file_chunk: buf.clone()
                             };
                             let tx_tmp = tx.clone();
-                            /*let join_handle = tokio::task::spawn(async move{
-                                let result = tx_tmp.send(Ok(reply)).await;
-                                match result {
-                                    Ok(_) =>{println!("{}", counter);},
-                                    Err(e) =>{
-                                        println!(" download_image ERROR: {}", e);
-                                    }
-                                }
-                            });
-                            join_handle.await;*/
                             let result = tx_tmp.send(Ok(reply)).await;
                             match result {
                                 Ok(_) =>{},
@@ -1948,15 +1938,6 @@ impl Chat for HABChat {
                                     println!(" download_image ERROR: {}", e);
                                 }
                             }
-                            /*tokio::spawn(async move {
-                                let result = tx_tmp.send(Ok(reply)).await;
-                                match result {
-                                    Ok(_) =>{println!("{}", counter);},
-                                    Err(e) =>{
-                                        println!(" download_image ERROR: {}", e);
-                                    }
-                                }
-                            }).await.expect("Error while sending message");*/
                             if let Ok(n) = buf_reader.read(buf.as_mut_slice()) {
                                 res = n;
                             } else {
@@ -1993,13 +1974,6 @@ impl Chat for HABChat {
                                 Ok(_) =>println!("download_image: finished download_image"),
                                 Err(e) =>println!(" download_image ERROR: {}", e)
                             }
-                            /*tokio::spawn(async move {
-                                let result = tx_tmp.send(Ok(reply)).await;
-                                match result {
-                                    Ok(_) =>println!("download_image: finished download_image"),
-                                    Err(e) =>println!(" download_image ERROR: {}", e)
-                                }
-                            });*/
                         }
                     } else {
                         println!("Error");
@@ -2029,8 +2003,8 @@ impl Chat for HABChat {
 
         let stream_receiver = StreamReceiver::new(rx);
         return Ok(Response::new(stream_receiver));
-    }
-    async fn remove_image(
+    }*/
+    /*async fn remove_image(
         &mut self,
         request: Request<RemoveImageRequest>,
     ) -> Result<tonic::Response<RemoveImageResponse>, tonic::Status> {
@@ -2068,7 +2042,7 @@ impl Chat for HABChat {
             response_code: 1
         };
         return Ok(Response::new(reply));
-    }
+    }*/
 }
 
 // compute distance in meters between 2 geopoints
@@ -2167,7 +2141,7 @@ fn compute_distance(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
     return distance;
 }
 
-fn write_image_file_name_to_db(user_id: &String, file_name: &String) {
+/*fn write_image_file_name_to_db(user_id: &String, file_name: &String) {
     use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
     let user_imgs_path = Path::new(USER_IMAGES_DIR);
     let db_file_name_path = Path::new("users.db");
@@ -2196,9 +2170,9 @@ fn write_image_file_name_to_db(user_id: &String, file_name: &String) {
             }
         }
     }
-}
+}*/
 
-fn read_image_file_name_from_db(user_id: &String)->String {
+/*fn read_image_file_name_from_db(user_id: &String)->String {
     use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
     let user_imgs_path = Path::new(USER_IMAGES_DIR);
     let db_file_name_path = Path::new("users.db");
@@ -2215,7 +2189,7 @@ fn read_image_file_name_from_db(user_id: &String)->String {
     }
     
     return found_file_name;
-}
+}*/
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
