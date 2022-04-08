@@ -8,23 +8,12 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-/*use std::path::Path;
-use std::fs::File;
-use std::io::Write;
-use std::io::Read;
-use std::io::BufWriter;
-use std::io::BufReader;*/
 use std::pin::Pin;
 use std::task::Poll;
 use std::task::Context;
-//use std::ops::Deref;
-/*pub mod chatservice {
-    tonic::include_proto!("chatservice");
-}*/
+
 const CHAT_SERVER_ADDRESS: &str = "192.168.0.100:50051";
 const PUSH_NOTIFITCATION_SERVER_ADDRESS: &str = "http://192.168.0.100:50052";
-
-//const USER_IMAGES_DIR: &str = "user_imgs";
 
 const SEARCHING_PEER_RESPONSE_CODE_SUCCESS: i32 = 1;
 const SEARCHING_PEER_RESPONSE_CODE_NO_PEER: i32 = 2;
@@ -55,8 +44,6 @@ use pushnotificationsservice::PushNotificationRequest;
 
 struct ConnectedClient {
     is_admin_on: bool,
-    //blocked_by_admin_ids_in_collective_chat: HashMap<String, UserBlockTime>,
-    //blocked_in_personal_chats: HashMap<String, UserBlockTime>,
     sender_new_peer: Option<Sender<Result<NewPeerResponse, Status>>>,
     sender_blocked_in_collective_chat: Option<Sender<Result<BlockUserInGroupChatResponse, Status>>>,
     sender_blocked_in_personal_chat: Option<Sender<Result<BlockUserInPersonalChatResponse, Status>>>,
@@ -69,7 +56,6 @@ struct ConnectedClient {
     sender_personal_chat_message: Option<Sender<Result<NewMessageResponse, Status>>>,
     sender_group_chat_message: Option<Sender<Result<NewGroupMessageResponse, Status>>>,
     sender_get_admin_status: Option<Sender<Result<GetAdminStatusResponse, Status>>>,
-    //image_name: Option<String>
 }
 
 struct SearchingPeer {
@@ -91,17 +77,6 @@ struct SearchingPeer {
     tx: Sender<Result<SearchingPeerResponse, Status>>
 }
 
-/*struct ConnectedPeerToPeer {//1-to-1 relation for personal chat
-    user_id1: String,
-    user_id2: String,
-}*/
-
-/*enum UserBlockTime {
-    OneHour,
-    TreeHours,
-    FiveHours,
-    Always
-}*/
 
 #[derive(Default)]
 struct HABChat {
@@ -110,8 +85,6 @@ struct HABChat {
     connected_peer_to_peer: Arc<RwLock<HashMap<String, String>>>,
     connected_peer_to_peers: Arc<RwLock<HashMap<String, HashSet<String>>>>,
     get_admin_status_peers: Arc<RwLock<HashMap<String, HashSet<String>>>>,
-    //chat_closed_clients: HashMap<String, Sender<Result<ChatClosedResponse, Status>>>,
-    //collective_chat_closed_clients: HashMap<String, Sender<Result<GroupChatClosedResponse, Status>>>,
 }
 
 pub struct DropReceiver<T> {
@@ -128,13 +101,7 @@ impl<T> Stream for DropReceiver<T> {
         return self.inner_rx.poll_recv(cx);
     }
 }
-/*impl<T> Deref for DropReceiver<T> {
-    type Target = Receiver<T>;
 
-    fn deref(&self) -> &Self::Target {
-        &self.inner_rx
-    }
-}*/
 impl<T> Drop for DropReceiver<T> {
     fn drop(&mut self) {
         println!("RECEIVER {} has been DROPPED", &self.user_id);
@@ -214,14 +181,12 @@ impl<T> Drop for DropReceiver<T> {
                             city: "".to_string(),
                         };
                         let tx_tmp = val.tx.clone();
-                        //tokio::spawn(async move {
-                            // sending response to client
-                            if let Ok(_) = tx_tmp.send(Ok(reply_to_peer)).await {
-                                //println!("drop peer: sent response peer closed");
-                            } else {
-                                println!("drop peer: problem while sending response peer closed");
-                            }
-                        //});
+                        // sending response to client
+                        if let Ok(_) = tx_tmp.send(Ok(reply_to_peer)).await {
+                            //println!("drop peer: sent response peer closed");
+                        } else {
+                            println!("drop peer: problem while sending response peer closed");
+                        }
                     }
                 }
             });
@@ -271,8 +236,6 @@ impl Chat for HABChat {
         {
             let connected_client = ConnectedClient{
                 is_admin_on: false,
-                //blocked_by_admin_ids_in_collective_chat: HashMap::new(),
-                //blocked_in_personal_chats: HashMap::new(),
                 sender_new_peer: Some(tx.clone()),
                 sender_blocked_in_collective_chat: Option::None,
                 sender_blocked_in_personal_chat: Option::None,
@@ -285,7 +248,6 @@ impl Chat for HABChat {
                 sender_personal_chat_message: Option::None,
                 sender_group_chat_message: Option::None,
                 sender_get_admin_status: Option::None,
-                //image_name: Option::None
             };
             let connected_clients = &mut (*(self.connected_clients.write().await));
             connected_clients.insert(user_id_from_request, connected_client);
@@ -400,7 +362,7 @@ impl Chat for HABChat {
                             if val.age >= searching_min_age_from_request && val.age <= searching_max_age_from_request {
                                 if val.searching_gender == gender_from_request || val.searching_gender == "gender_all" {
                                     if age_from_request >= val.searching_min_age && age_from_request <= val.searching_max_age {
-                                        if searching_city_from_request == "Все" || searching_city_from_request == val.city {
+                                        if searching_city_from_request == "All" || searching_city_from_request == val.city {
                                             //println!("if age_from_request >= val.searching_min_age");
                                             let connected_peer_to_peers = &mut(*(self.connected_peer_to_peers.write().await));
                                             if connected_peer_to_peers.contains_key(&user_id_from_request) == true {
@@ -470,7 +432,7 @@ impl Chat for HABChat {
                                         }
                                         if actual_distance_between_peers <= visible_in_radius_in_meters_from_request
                                         {
-                                            if val.searching_city == "Все" || val.searching_city == city_from_request {
+                                            if val.searching_city == "All" || val.searching_city == city_from_request {
                                                 //println!("if actual_distance_between_peers <= visible_in_radius_in_meters");
                                                 let connected_peer_to_peers = &mut(*(self.connected_peer_to_peers.write().await));
                                                 if connected_peer_to_peers.contains_key(key) == true {
@@ -561,7 +523,7 @@ impl Chat for HABChat {
                                 }
                             }
                             
-                        }//searching_city_from_request == "Все" || searching_city_from_request == val.city
+                        }//searching_city_from_request == "All" || searching_city_from_request == val.city
                     }
                 }
             }
@@ -590,14 +552,7 @@ impl Chat for HABChat {
             }
         }
 
-        if is_found_peer == true {
-            // remove those searching peers who found each other
-            /*self.searching_peers.remove(&user_id_from_request);
-            self.searching_peers.remove(&found_peer_id);
-            self.searching_peers.retain(|key, val|{
-                key != &user_id_from_request && radius_distance_in_meters_from_request == (*val).radius_distance_in_meters
-            });*/
-        } else {
+        if is_found_peer == false {
             println!("is_found_peer == false");
             tokio::spawn(async move {
                 for _ in 0i32..1 {
@@ -1329,11 +1284,6 @@ impl Chat for HABChat {
                         }
                     }
                 }
-                //self.personal_chat_message_senders.remove(&user_id_from_request);
-                //self.personal_chat_message_senders.remove(&user_id2_from_request);
-                //self.typing_message_senders.remove(&user_id_from_request);
-                //self.typing_message_senders.remove(&user_id2_from_request);
-                //self.chat_closed_clients.remove(&user_id_from_request);
 
                 let connected_clients = &mut(*(self.connected_clients.write().await));
                 if let Some(connected_client) = connected_clients.get_mut(&user_id_from_request) {
@@ -1366,7 +1316,6 @@ impl Chat for HABChat {
         let user_id_from_request = request.get_ref().user_id.clone();
         let is_closed = request.get_ref().is_closed;
 
-        //self.collective_chat_closed_clients.entry(user_id_from_request.clone()).or_insert(tx.clone());
         {
             let connected_clients = &mut(*(self.connected_clients.write().await));
             if let Some(connected_client) = connected_clients.get_mut(&user_id_from_request) {
@@ -1400,12 +1349,7 @@ impl Chat for HABChat {
                     }
                 }
             }
-            //self.collective_chat_message_senders.remove(&user_id_from_request);
-            //self.collective_chat_message_senders.remove(user_id2);
-            //self.typing_message_senders.remove(&user_id_from_request);
-            //self.typing_message_senders.remove(user_id2);
             
-            //self.collective_chat_closed_clients.remove(&user_id_from_request);
             let connected_clients = &mut (*(self.connected_clients.write().await));
             if let Some(connected_client) = connected_clients.get_mut(&user_id_from_request) {
                 connected_client.sender_collective_chat_closed_clients = Option::None;
@@ -1414,11 +1358,6 @@ impl Chat for HABChat {
                 connected_client.sender_group_chat_message = Option::None;
             }
             
-            //self.collective_chat_closed_clients.remove(user_id2);
-            /*self.connected_peer_to_peers.remove(&user_id_from_request);
-            for (_, val) in &mut self.connected_peer_to_peers {
-                val.remove(&user_id_from_request);
-            }*/
         }
         let stream_receiver = StreamReceiver::new(rx);
         return Ok(Response::new(stream_receiver));
@@ -1474,13 +1413,6 @@ impl Chat for HABChat {
             };
         }
 
-        //self.personal_chat_message_senders.remove(&user_id_from_request);
-        //self.collective_chat_message_senders.remove(&user_id_from_request);
-
-        //self.typing_message_senders.remove(&user_id_from_request);
-
-        //self.chat_closed_clients.remove(&user_id_from_request);
-        //self.collective_chat_closed_clients.remove(&user_id_from_request);
         if user_id_from_request != "" {
             let connected_clients = &mut(*(self.connected_clients.write().await));
             if let Some(connected_client) = connected_clients.get_mut(&user_id_from_request) {
@@ -1832,217 +1764,6 @@ impl Chat for HABChat {
         return Ok(Response::new(ReportUserResponse{}));
     }
     
-    /*async fn upload_image(
-        &mut self,
-        request: Request<tonic::Streaming<UploadImageRequest>>,
-    ) -> Result<Response<UploadImageResponse>, tonic::Status>
-    {
-        println!("upload_image request");
-        let mut stream = request.into_inner();
-        use std::fs;
-        let user_imgs_path = Path::new(USER_IMAGES_DIR);
-        let create_dir_res = fs::create_dir(&user_imgs_path);
-        match create_dir_res {
-            Err(err) => println!("{:?}", err.kind()),
-            Ok(_) => {}
-        }
-
-        use tokio_stream::StreamExt;
-        if let Some(uploadImageRequestResult) = stream.next().await {
-            if let Ok(uploadImageRequest) = uploadImageRequestResult {
-                let user_id_from_request = uploadImageRequest.user_id;
-                println!("upload_image: user_id_from_request={}",&user_id_from_request);
-                let file_name_from_request = uploadImageRequest.image_name;
-                write_image_file_name_to_db(&user_id_from_request, &file_name_from_request);
-                println!("upload_image: file_name_from_request={}",&file_name_from_request);
-                // check if file with same file_name not exists
-                let file_name_path = Path::new(&file_name_from_request);
-                let file_name_in_user_imgs_path = user_imgs_path.join(file_name_path);
-                if file_name_in_user_imgs_path.exists() == false {
-                    let file = File::create(&file_name_in_user_imgs_path)?;
-                    let mut buf_writer = BufWriter::new(file);
-                    let connected_clients = &mut (*(self.connected_clients.write().await));
-                    if let Some(connected_client) = connected_clients.get_mut(&user_id_from_request) {
-                        connected_client.image_name = Some(file_name_from_request);
-                    }
-                    let file_chunk = uploadImageRequest.file_chunk;
-                    let res = buf_writer.write_all(file_chunk.as_slice());
-
-                    if let Err(err) = res {
-                        println!("{:?}", err.kind());
-                    }
-            
-                    while let Some(uploadImageRequestResult) = stream.next().await {
-                        if let Ok(uploadImageRequest) = uploadImageRequestResult {
-                            let file_chunk = uploadImageRequest.file_chunk;
-                            let res = buf_writer.write_all(file_chunk.as_slice());
-                            if let Err(err) = res {
-                                println!("{:?}", err.kind());
-                            }
-                        }
-                    }
-                    let res = buf_writer.flush();
-                    if let Err(err) = res {
-                        println!("error: {}", err);
-                    }
-                    println!("upload_image: upload success");
-                } else {
-                    println!("upload_image: file with same name exists");
-                    //todo: create another file name
-                }
-            }
-        }
-
-        let reply = UploadImageResponse{
-        };
-        return Ok(Response::new(reply));
-    }*/
-
-    /*type DownloadImageStream = StreamReceiver<Result<DownloadImageResponse, tonic::Status>>;
-    async fn download_image(
-        &self,
-        request: tonic::Request<DownloadImageRequest>,
-    ) -> Result<tonic::Response<Self::DownloadImageStream>, tonic::Status> {
-        let (tx, rx) = mpsc::channel(10000);
-
-        let user_id_from_request = request.get_ref().user_id.clone();
-
-        let connected_clients = &(*(self.connected_clients.read().await));
-        if let Some(connected_client) = connected_clients.get(&user_id_from_request) {
-            let image_name: String;
-            if let Some(image_name_ref) = &connected_client.image_name {
-                image_name = image_name_ref.clone();
-            } else {
-                image_name = read_image_file_name_from_db(&user_id_from_request);
-            }
-            if image_name != "" {
-                let user_imgs_path = Path::new(USER_IMAGES_DIR);
-                let file_name_path = Path::new(&image_name);
-                let file_name_in_user_imgs_path = user_imgs_path.join(file_name_path);
-                if let Ok(file) = File::open(&file_name_in_user_imgs_path) {
-                    let mut buf_reader = BufReader::new(file);
-                    let buffer_size = 1024;
-                    let mut buf: Vec<u8> = vec![0; buffer_size];
-
-                    if let Ok(mut res) = buf_reader.read(buf.as_mut_slice()) {
-                        while res > 0 {
-                            let reply = DownloadImageResponse {
-                                response_code: 1,
-                                file_chunk: buf.clone()
-                            };
-                            let tx_tmp = tx.clone();
-                            let result = tx_tmp.send(Ok(reply)).await;
-                            match result {
-                                Ok(_) =>{},
-                                Err(e) =>{
-                                    println!(" download_image ERROR: {}", e);
-                                }
-                            }
-                            if let Ok(n) = buf_reader.read(buf.as_mut_slice()) {
-                                res = n;
-                            } else {
-                                println!(" download_image readfile ERROR: ");
-                                let reply = DownloadImageResponse {
-                                    response_code: -1,
-                                    file_chunk: vec![]
-                                };
-                                let tx_tmp = tx.clone();
-                                let join_handle = tokio::spawn(async move {
-                                    let result = tx_tmp.send(Ok(reply)).await;
-                                    match result {
-                                        Ok(_) =>{},
-                                        Err(e) =>{
-                                            println!(" download_image ERROR: {}", e)
-                                        }
-                                    }
-                                });
-                                let res = join_handle.await;
-                                if let Err(err) = res {
-                                    println!("error: {}", err);
-                                }
-                            }
-                        }
-                        if res == 0 {
-                            println!("finished");
-                            let reply = DownloadImageResponse {
-                                response_code: 2,
-                                file_chunk: buf.clone()
-                            };
-                            let tx_tmp = tx.clone();
-                            let result = tx_tmp.send(Ok(reply)).await;
-                            match result {
-                                Ok(_) =>println!("download_image: finished download_image"),
-                                Err(e) =>println!(" download_image ERROR: {}", e)
-                            }
-                        }
-                    } else {
-                        println!("Error");
-                        let reply = DownloadImageResponse {
-                            response_code: -1,
-                            file_chunk: vec![]
-                        };
-                        let tx_tmp = tx.clone();
-                        tokio::spawn(async move {
-                            let res = tx_tmp.send(Ok(reply)).await;
-                            match res {
-                                Ok(_) =>println!("download_image: sent a download_image"),
-                                Err(e) =>println!(" download_image ERROR: {}", e)
-                            }
-                        });
-                    }
-                } else {
-                    println!("download_image: error while opening file");
-                }
-            } else {
-                println!("download_image: no image_name");
-            }
-            
-        } else {
-            println!("download_image: no connected_client");
-        }
-
-        let stream_receiver = StreamReceiver::new(rx);
-        return Ok(Response::new(stream_receiver));
-    }*/
-    /*async fn remove_image(
-        &mut self,
-        request: Request<RemoveImageRequest>,
-    ) -> Result<tonic::Response<RemoveImageResponse>, tonic::Status> {
-        //todo: remove image_name from connected client user_id
-        //todo: remove image from USER_IMAGES_DIR
-        use std::fs;
-        let user_id_from_request = request.get_ref().user_id.clone();
-        let connected_clients = &mut (*(self.connected_clients.write().await));
-        let mut image_name = "".to_string();
-        if let Some(connected_client) = connected_clients.get_mut(&user_id_from_request) {
-            if let Some(image_name_ref) = &mut connected_client.image_name {
-                image_name = image_name_ref.clone();
-            
-                connected_client.image_name = Option::None;
-            }
-        }
-        if image_name == "" {
-            image_name = read_image_file_name_from_db(&user_id_from_request);
-        }
-        if image_name != "" {
-            let user_imgs_path = Path::new(USER_IMAGES_DIR);
-            let file_name_path = Path::new(&image_name);
-            let file_name_in_user_imgs_path = user_imgs_path.join(file_name_path);
-            if file_name_in_user_imgs_path.exists() == true {
-                let res = fs::remove_file(&file_name_in_user_imgs_path);
-                if let Err(_) = res {
-                    println!("error while removing file");
-                }
-            }
-        }
-
-        write_image_file_name_to_db(&user_id_from_request, &"".to_string());
-
-        let reply = RemoveImageResponse {
-            response_code: 1
-        };
-        return Ok(Response::new(reply));
-    }*/
 }
 
 // compute distance in meters between 2 geopoints
@@ -2141,64 +1862,11 @@ fn compute_distance(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
     return distance;
 }
 
-/*fn write_image_file_name_to_db(user_id: &String, file_name: &String) {
-    use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
-    let user_imgs_path = Path::new(USER_IMAGES_DIR);
-    let db_file_name_path = Path::new("users.db");
-    let file_name_in_user_imgs_path = user_imgs_path.join(db_file_name_path);
-    if Path::new(&user_imgs_path).exists() {
-        if Path::new(&file_name_in_user_imgs_path).exists() {
-            let db_res = PickleDb::load(&file_name_in_user_imgs_path, PickleDbDumpPolicy::DumpUponRequest, SerializationMethod::Json);
-            if let Ok(mut db) = db_res {
-                let res = db.set(user_id, file_name);
-                if let Ok(_) = res {
-                    println!("The image of {} loaded from file", user_id);
-                }
-            } else {
-                let mut db = PickleDb::new(&file_name_in_user_imgs_path, PickleDbDumpPolicy::AutoDump, SerializationMethod::Json);
-                let res = db.set(user_id, file_name);
-                if let Ok(_) = res {
-                    println!("The image of {} loaded from file", user_id);
-                    //println!("The image of {} is: {}", user_id, db.get::<String>(user_id));
-                }
-            }
-        } else {
-            let mut db = PickleDb::new(&file_name_in_user_imgs_path, PickleDbDumpPolicy::AutoDump, SerializationMethod::Json);
-            let res = db.set(user_id, file_name);
-            if let Ok(_) = res {
-                println!("The image of {} loaded from file", user_id);
-            }
-        }
-    }
-}*/
-
-/*fn read_image_file_name_from_db(user_id: &String)->String {
-    use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
-    let user_imgs_path = Path::new(USER_IMAGES_DIR);
-    let db_file_name_path = Path::new("users.db");
-    let file_name_in_user_imgs_path = user_imgs_path.join(db_file_name_path);
-
-    let mut found_file_name = String::from("");
-    if Path::new(&file_name_in_user_imgs_path).exists() {
-        let db_res = PickleDb::load(&file_name_in_user_imgs_path, PickleDbDumpPolicy::DumpUponRequest, SerializationMethod::Json);
-        if let Ok(db) = db_res {
-            if let Some(file_name) = db.get::<String>(user_id) {
-                found_file_name = file_name;
-            }
-        }
-    }
-    
-    return found_file_name;
-}*/
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = CHAT_SERVER_ADDRESS.parse()?;
     let mut hab_chat = HABChat::default();
     hab_chat.searching_peers = Arc::new(RwLock::new(HashMap::new()));
-    //hab_chat.connected_peers_to_peers = Vec::new();
-    //hab_chat.connected_clients = HashMap::new();
-    //hab_chat.pending_messages = HashMap::new();
 
     println!("ChatServer listening on {}", addr);
 
