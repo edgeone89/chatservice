@@ -22,6 +22,8 @@ const SEARCHING_PEER_RESPONSE_CODE_PEER_OUT_OF_RADIUS: i32 = 4;
 const SEARCHING_PEER_RESPONSE_CODE_PEER_SEARCHING_OFF: i32 = 5;
 const SEARCHING_PEER_RESPONSE_CODE_PEER_SEACHING_CITY_NOT_FOUND: i32 = 6;
 
+const DEFAULT_SEARCHING_CITY: &str = "All";
+
 mod chatservice;
 use chatservice::chat_server::{Chat, ChatServer};
 use chatservice::{NewPeerRequest, NewPeerResponse, SearchingPeerRequest, SearchingPeerResponse, 
@@ -362,7 +364,7 @@ impl Chat for HABChat {
                             if val.age >= searching_min_age_from_request && val.age <= searching_max_age_from_request {
                                 if val.searching_gender == gender_from_request || val.searching_gender == "gender_all" {
                                     if age_from_request >= val.searching_min_age && age_from_request <= val.searching_max_age {
-                                        if searching_city_from_request == "All" || searching_city_from_request == val.city {
+                                        if searching_city_from_request == DEFAULT_SEARCHING_CITY || searching_city_from_request == val.city {
                                             //println!("if age_from_request >= val.searching_min_age");
                                             let connected_peer_to_peers = &mut(*(self.connected_peer_to_peers.write().await));
                                             if connected_peer_to_peers.contains_key(&user_id_from_request) == true {
@@ -432,7 +434,7 @@ impl Chat for HABChat {
                                         }
                                         if actual_distance_between_peers <= visible_in_radius_in_meters_from_request
                                         {
-                                            if val.searching_city == "All" || val.searching_city == city_from_request {
+                                            if val.searching_city == DEFAULT_SEARCHING_CITY || val.searching_city == city_from_request {
                                                 //println!("if actual_distance_between_peers <= visible_in_radius_in_meters");
                                                 let connected_peer_to_peers = &mut(*(self.connected_peer_to_peers.write().await));
                                                 if connected_peer_to_peers.contains_key(key) == true {
@@ -523,7 +525,7 @@ impl Chat for HABChat {
                                 }
                             }
                             
-                        }//searching_city_from_request == "All" || searching_city_from_request == val.city
+                        }//searching_city_from_request == DEFAULT_SEARCHING_CITY || searching_city_from_request == val.city
                     }
                 }
             }
